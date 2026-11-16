@@ -1,0 +1,3 @@
+-- 0002_proxies — reserved for phase 2 (Proxy library): proxy library columns/tables (country, notes, check history, ...).
+-- Empty (comments only) migrations are skipped and NOT recorded, so filling this file later
+-- still applies it on databases created before that phase.

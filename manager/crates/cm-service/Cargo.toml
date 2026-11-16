@@ -1,0 +1,18 @@
+[package]
+name = "cm-service"
+description = "Use-cases of Camoufox Manager (Manager), one module per area, over cm-core traits"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cm-core.workspace = true
+cm-relay.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+cm-store.workspace = true

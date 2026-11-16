@@ -1,0 +1,109 @@
+/* Tailwind v4 source. Build: manager/ui-build.sh -> crates/cm-ui/assets/app.css (committed, works offline).
+   Automatic source detection is off; every file with class names is listed below. */
+@import "tailwindcss" source(none);
+@source "./index.html";
+@source "./*.js";
+@source "./components/*.js";
+@source "./pages/*.js";
+
+/* Màu theo biến CSS: đổi sáng/tối chỉ cần đổi biến ở :root */
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --panel-2: #f2f4f7; --line: #e4e7ec; --row-hover: #fafbfc;
+  --text: #121620; --muted: #5f6775; --faint: #9aa1ad;
+  --accent: #4f46e5; --accent-2: #eef0ff;
+  --ok: #12a150; --warn: #a96a12; --warn-bg: #fdf3e0; --bad: #d14343;
+  --shadow: 0 1px 2px rgba(16,24,40,.05), 0 6px 20px rgba(16,24,40,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0c0e12; --panel: #14171d; --panel-2: #1b1f27; --line: #252a34; --row-hover: #171b22;
+    --text: #e8eaef; --muted: #9aa1ad; --faint: #687180;
+    --accent: #8079ff; --accent-2: #24224b;
+    --ok: #3ad47f; --warn: #f0b350; --warn-bg: #352812; --bad: #ff6b6b;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.25);
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg); --color-panel: var(--panel); --color-panel2: var(--panel-2);
+  --color-line: var(--line); --color-hover: var(--row-hover);
+  --color-ink: var(--text); --color-muted: var(--muted); --color-faint: var(--faint);
+  --color-accent: var(--accent); --color-accent2: var(--accent-2);
+  --color-ok: var(--ok); --color-warn: var(--warn); --color-warnbg: var(--warn-bg); --color-bad: var(--bad);
+  --shadow-card: var(--shadow);
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --animate-pulse-ring: pulse-ring 1.6s infinite;
+  --animate-spin-fast: spin .7s linear infinite;
+  --animate-toast: toast-in .2s ease-out;
+}
+
+@layer base {
+  html, body, #app { height: 100%; }
+  body { @apply bg-bg text-ink font-sans text-[13.5px] leading-[1.45] antialiased overflow-hidden; }
+  button, select, input, textarea { font: inherit; color: inherit; }
+  kbd { @apply font-mono font-semibold text-[10.5px] px-[5px] py-px border border-line border-b-2 rounded bg-panel text-muted; }
+  code { @apply font-mono text-[12.5px]; }
+}
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 55%, transparent) }
+  70% { box-shadow: 0 0 0 7px transparent }
+  100% { box-shadow: 0 0 0 0 transparent }
+}
+@keyframes toast-in { from { transform: translateY(8px); opacity: 0 } }
+@keyframes flash { from { background: color-mix(in srgb, var(--ok) 35%, var(--panel)) } }
+@keyframes sk { to { background-position: -200% 0 } }
+
+@layer components {
+  .btn { @apply inline-flex items-center justify-center gap-[7px] border border-line bg-panel px-[13px] py-[7px] rounded-[10px] cursor-pointer font-semibold text-[13px] whitespace-nowrap transition hover:bg-panel2 disabled:opacity-50 disabled:cursor-default; }
+  .btn-start { @apply bg-accent border-accent text-white min-w-[92px] hover:bg-accent hover:brightness-110; }
+  .btn-stop { @apply bg-bad border-bad text-white min-w-[92px] hover:bg-bad hover:brightness-110; }
+  .icon-btn { @apply border-0 bg-transparent cursor-pointer text-faint px-[5px] py-[3px] rounded-md text-[13px] hover:text-accent hover:bg-accent2; }
+  .spin { @apply size-[13px] border-2 border-current border-r-transparent rounded-full animate-spin-fast; }
+  .chip { @apply inline-flex items-center gap-[7px] px-[11px] py-[5px] rounded-full bg-panel2 text-muted text-xs whitespace-nowrap; }
+  .dot {@apply size-2 rounded-full bg-faint shrink-0; }
+  /* form controls (components/fields.js) */
+  .input { @apply px-3 py-2 border border-line rounded-lg bg-panel text-ink text-[13.5px] outline-none focus:border-accent disabled:opacity-50; }
+  select.input { @apply px-2.5; }
+  .search { @apply flex items-center gap-2 flex-1 min-w-40 max-w-[340px] px-3 py-[7px] border border-line rounded-[10px] bg-panel text-faint focus-within:border-accent; }
+  .search input { @apply flex-1 min-w-0 border-0 bg-transparent outline-none text-ink text-[13px]; }
+  .banner { @apply flex items-start gap-2.5 px-3.5 py-2.5 mb-3 rounded-xl bg-warnbg text-warn text-[13px]; }
+  /* settings-style sections: title + bordered list of label/value rows */
+  .section-title { @apply m-0 mb-2 text-[11px] font-semibold uppercase tracking-[.08em] text-faint; }
+  .kv { @apply bg-panel border border-line rounded-xl overflow-hidden; }
+  .kv-row { @apply grid grid-cols-[180px_1fr] items-center gap-4 px-4 py-3 border-b border-line last:border-b-0 max-sm:grid-cols-1 max-sm:gap-1; }
+  .kv-row > span:first-child { @apply text-muted text-[13px]; }
+  /* simple list table (components/table.js) */
+  .list-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .list-tbl th { position: sticky; top: 0; z-index: 1; background: var(--panel); text-align: left; padding: 10px 16px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .list-tbl td { padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .list-tbl tbody tr:last-child td { border-bottom: none; }
+  .list-tbl tbody tr:hover td { background: var(--row-hover); }
+  .skel { height: 11px; border-radius: 5px; background: linear-gradient(90deg, var(--panel-2), var(--line), var(--panel-2)); background-size: 200% 100%; animation: sk 1.2s infinite; }
+
+  /* Bảng tính: cột/hàng tiêu đề dính (sticky) khó viết bằng utility nên gom lại đây */
+  .grid-tbl { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: max-content; font-size: 12.5px; }
+  .grid-tbl th, .grid-tbl td { height: 32px; padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+  .grid-tbl thead th { position: sticky; z-index: 3; background: var(--panel-2); color: var(--muted); font-weight: 640; }
+  .grid-tbl thead tr.g th { top: 0; height: 26px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); border-bottom-color: transparent; }
+  .grid-tbl thead tr.h th { top: 26px; font-size: 11.5px; box-shadow: inset 0 -1px 0 var(--line); }
+  .grid-tbl td { background: var(--panel); user-select: none; -webkit-user-select: none; cursor: cell; }
+  .grid-tbl tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--panel-2) 45%, var(--panel)); }
+  .grid-tbl tbody tr:hover td { background: var(--row-hover); }
+  .grid-tbl tbody tr.live td.c-name { box-shadow: inset 3px 0 0 var(--ok); }
+  .grid-tbl .gs { border-left: 2px solid var(--line); }
+  /* cột cố định: # và Tên bên trái, hành động bên phải */
+  .grid-tbl .s0 { position: sticky; left: 0; z-index: 2; }
+  .grid-tbl .s1 { position: sticky; left: 44px; z-index: 2; border-right: 2px solid var(--line); }
+  .grid-tbl .sr { position: sticky; right: 0; z-index: 2; border-left: 2px solid var(--line); border-right: none; text-align: center; padding: 0 8px; cursor: default; }
+  .grid-tbl thead .s0, .grid-tbl thead .s1, .grid-tbl thead .sr { z-index: 4; }
+  .grid-tbl td.rn { color: var(--faint); text-align: right; font: 11px var(--font-mono); background: var(--panel-2) !important; cursor: pointer; }
+  .grid-tbl td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .grid-tbl td.mono { font-family: var(--font-mono); font-size: 11.5px; }
+  .grid-tbl td.sel { background: color-mix(in srgb, var(--accent) 14%, var(--panel)) !important; }
+  .grid-tbl td.cur { box-shadow: inset 0 0 0 2px var(--accent) !important; }
+  .grid-tbl td.flash { animation: flash .5s; }
+  .grid-tbl select { width: 100%; padding: 3px 6px; border-radius: 6px; font-size: 12px; }
+  .grid-tbl .btn { padding: 4px 10px; border-radius: 7px; font-size: 12px; min-width: 76px; }
+}

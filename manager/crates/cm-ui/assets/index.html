@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Camoufox Manager</title>
+<!-- Everything is served by the binary (include_str!), nothing is loaded from the network. -->
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="app"></div>
+
+<script src="/vendor/vue.global.prod.js"></script>
+<script src="/core.js"></script>
+<script src="/i18n.js"></script>
+<!-- shared components -->
+<script src="/components/icons.js"></script>
+<script src="/components/toast.js"></script>
+<script src="/components/dialog.js"></script>
+<script src="/components/fields.js"></script>
+<script src="/components/table.js"></script>
+<script src="/components/page.js"></script>
+<script src="/components/sidebar.js"></script>
+<!-- per-area components (filled by their phase) -->
+<script src="/components/profile-form.js"></script>
+<script src="/components/cookies.js"></script>
+<script src="/components/transfer.js"></script>
+<script src="/components/org.js"></script>
+<script src="/components/sheets.js"></script>
+<!-- pages (proxies before profiles: profiles uses useProxies) -->
+<script src="/pages/proxies.js"></script>
+<script src="/pages/profiles.js"></script>
+<script src="/pages/templates.js"></script>
+<script src="/pages/schedules.js"></script>
+<script src="/pages/settings.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>

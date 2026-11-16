@@ -1,0 +1,21 @@
+[package]
+name = "camoufox-manager"
+description = "Camoufox Manager app: desktop window, `serve` mode, CLI — wiring only"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cm-core.workspace = true
+cm-store.workspace = true
+cm-relay.workspace = true
+cm-engine-camoufox.workspace = true
+cm-service.workspace = true
+cm-api.workspace = true
+anyhow.workspace = true
+axum.workspace = true
+dotenvy.workspace = true
+muda.workspace = true
+tao.workspace = true
+tokio.workspace = true
+wry.workspace = true

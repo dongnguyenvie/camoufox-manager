@@ -1,0 +1,3 @@
+-- 0007_settings — reserved for phase 12 (Settings, API key): anything settings needs beyond the key/value table.
+-- Empty (comments only) migrations are skipped and NOT recorded, so filling this file later
+-- still applies it on databases created before that phase.

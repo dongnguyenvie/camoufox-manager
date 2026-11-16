@@ -1,0 +1,94 @@
+//! Use-cases of the app, independent of the browser engine, storage and HTTP.
+//!
+//! [`Manager`] holds the trait objects ([`Deps`]) and the in-memory runtime state (running
+//! browsers, active relays). Each area adds an `impl Manager` block in its own module:
+//!
+//! | module | area | phase |
+//! |---|---|---|
+//! | `profiles` | overview, create/delete, start/stop | 1, 4 |
+//! | `proxies` | library, check, assign, relays | 1, 2 |
+//! | `cookies` | import/export | 5 |
+//! | `transfer` | zip export/import, clone, bulk create | 6 |
+//! | `org` | tags, groups, saved views, bulk actions | 7 |
+//! | `templates` | templates + extensions | 9 |
+//! | `scheduler` | scheduled launches | 10 |
+//! | `sheets` | xlsx/csv import/export | 11 |
+//! | `settings` | language, engine, API key | 1, 12 |
+
+pub mod cookies;
+pub mod org;
+pub mod profiles;
+pub mod proxies;
+pub mod scheduler;
+pub mod settings;
+pub mod sheets;
+pub mod templates;
+pub mod transfer;
+
+use cm_core::{
+    Clock, Engine, ExtensionRepo, GroupRepo, ProfileRepo, ProxyChecker, ProxyId, ProxyRepo, SavedViewRepo, ScheduleRepo, SettingsRepo,
+    TagRepo, TemplateRepo,
+};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
+use tokio::{sync::Mutex, task::JoinHandle};
+
+/// Default first port of the local relays (D7: `CM_PROXY_BASE_PORT`).
+pub const DEFAULT_PROXY_BASE_PORT: u16 = 31000;
+
+/// Implementations wired by the app binary.
+pub struct Deps {
+    pub engine: Arc<dyn Engine>,
+    pub profiles: Arc<dyn ProfileRepo>,
+    pub proxies: Arc<dyn ProxyRepo>,
+    pub checker: Arc<dyn ProxyChecker>,
+    pub tags: Arc<dyn TagRepo>,
+    pub groups: Arc<dyn GroupRepo>,
+    pub views: Arc<dyn SavedViewRepo>,
+    pub templates: Arc<dyn TemplateRepo>,
+    pub extensions: Arc<dyn ExtensionRepo>,
+    pub schedules: Arc<dyn ScheduleRepo>,
+    pub settings: Arc<dyn SettingsRepo>,
+    pub clock: Arc<dyn Clock>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Config {
+    /// Relay of proxy `id` listens on `proxy_base_port + id - 1`.
+    pub proxy_base_port: u16,
+    /// Shown on the settings page.
+    pub data_dir: PathBuf,
+    pub db_path: Option<PathBuf>,
+}
+
+/// A browser this app started.
+struct Running {
+    ws: String,
+    proxy: Option<ProxyId>,
+    port: Option<u16>,
+    started_at: u64,
+}
+
+pub struct Manager {
+    d: Deps,
+    cfg: Config,
+    running: Mutex<HashMap<String, Running>>,
+    /// Active relays by proxy id.
+    relays: Mutex<HashMap<ProxyId, (u16, JoinHandle<()>)>>,
+}
+
+impl Manager {
+    pub fn new(deps: Deps, cfg: Config) -> Self {
+        Self { d: deps, cfg, running: Mutex::new(HashMap::new()), relays: Mutex::new(HashMap::new()) }
+    }
+
+    pub fn config(&self) -> &Config {
+        &self.cfg
+    }
+
+    pub fn deps(&self) -> &Deps {
+        &self.d
+    }
+}
+
+#[cfg(test)]
+mod tests;

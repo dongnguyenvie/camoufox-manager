@@ -1,0 +1,32 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+cm-core = { path = "crates/cm-core" }
+cm-store = { path = "crates/cm-store" }
+cm-relay = { path = "crates/cm-relay" }
+cm-engine-camoufox = { path = "crates/cm-engine-camoufox" }
+cm-service = { path = "crates/cm-service" }
+cm-api = { path = "crates/cm-api" }
+cm-ui = { path = "crates/cm-ui" }
+
+anyhow = "1.0.104"
+async-trait = "0.1"
+axum = "0.8.9"
+base64 = "0.23.1"
+dotenvy = "0.15.7"
+muda = "0.21.2"
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "rustls", "query"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tao = "0.37.3"
+thiserror = "2"
+tokio = { version = "1.54.1", features = ["full"] }
+wry = "0.57.3"

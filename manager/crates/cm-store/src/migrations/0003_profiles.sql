@@ -1,0 +1,3 @@
+-- 0003_profiles — reserved for phase 4 (Profile settings + pinned machine): profile setting columns if any (settings JSON already exists).
+-- Empty (comments only) migrations are skipped and NOT recorded, so filling this file later
+-- still applies it on databases created before that phase.

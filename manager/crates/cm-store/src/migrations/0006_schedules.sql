@@ -1,0 +1,3 @@
+-- 0006_schedules — reserved for phase 10 (Scheduling): schedules, schedule_runs.
+-- Empty (comments only) migrations are skipped and NOT recorded, so filling this file later
+-- still applies it on databases created before that phase.

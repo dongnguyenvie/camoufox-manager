@@ -1,0 +1,3 @@
+-- 0005_templates — reserved for phase 9 (Templates + extensions): templates, extensions, profile_extensions, template_extensions.
+-- Empty (comments only) migrations are skipped and NOT recorded, so filling this file later
+-- still applies it on databases created before that phase.
