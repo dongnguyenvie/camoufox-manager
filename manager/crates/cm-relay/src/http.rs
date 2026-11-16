@@ -1,17 +1,14 @@
-//! Upstream HTTP proxy (CONNECT + absolute-URI): the browser only sees 127.0.0.1:P, the
-//! upstream credentials are injected here.
+//! HTTP-style forwarding: HTTP and HTTPS upstream proxies (CONNECT + absolute-URI, auth
+//! injected), plus the browser-facing half of the SOCKS tunnels (200 reply / origin-form).
 //!
-//! Per connection: read the request head from the browser, drop its proxy auth, add the
-//! upstream `Proxy-Authorization`, then pipe both ways. Upstream failure closes the connection
+//! Per connection: the head is read from the browser, its proxy auth is dropped, the upstream
+//! `Proxy-Authorization` added, then both sides are piped. Any failure closes the connection
 //! (fail-closed); there is no direct path to the network.
 
-use crate::Upstream;
-use anyhow::{Context, Result, bail};
+use crate::{Upstream, target::Head};
+use anyhow::Result;
 use base64::Engine;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt, copy_bidirectional},
-    net::TcpStream,
-};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, copy_bidirectional};
 
 fn auth_header(up: &Upstream) -> Option<String> {
     let user = up.username.as_deref()?;
@@ -19,54 +16,72 @@ fn auth_header(up: &Upstream) -> Option<String> {
     Some(format!("Proxy-Authorization: Basic {b64}\r\n"))
 }
 
-pub(crate) async fn handle(mut client: TcpStream, up: &Upstream) -> Result<()> {
-    // Read up to the end of the request head.
-    let mut buf = Vec::with_capacity(4096);
-    let head_end = loop {
-        let mut chunk = [0u8; 4096];
-        let n = client.read(&mut chunk).await?;
-        if n == 0 {
-            return Ok(());
-        }
-        buf.extend_from_slice(&chunk[..n]);
-        if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
-            break i + 4;
-        }
-        if buf.len() > 64 * 1024 {
-            bail!("request head too large");
-        }
-    };
-
-    let head = String::from_utf8_lossy(&buf[..head_end]).to_string();
-    let mut lines = head.split("\r\n");
-    let request_line = lines.next().unwrap_or_default().to_string();
-    let is_connect = request_line.starts_with("CONNECT ");
-
-    let mut new_head = format!("{request_line}\r\n");
-    for l in lines.filter(|l| !l.is_empty()) {
+/// Head for an HTTP(S) upstream proxy: same request line, browser auth replaced by ours.
+fn proxied_head(head: &Head, up: &Upstream) -> String {
+    let mut out = format!("{} {} {}\r\n", head.method, head.target, head.version);
+    for l in head.lines() {
         let lower = l.to_ascii_lowercase();
         // Drop the client's auth; for plain HTTP also drop keep-alive so every request carries auth.
         if lower.starts_with("proxy-authorization:")
-            || (!is_connect && (lower.starts_with("proxy-connection:") || lower.starts_with("connection:")))
+            || (!head.is_connect() && (lower.starts_with("proxy-connection:") || lower.starts_with("connection:")))
         {
             continue;
         }
-        new_head.push_str(l);
-        new_head.push_str("\r\n");
+        out.push_str(&l);
+        out.push_str("\r\n");
     }
     if let Some(h) = auth_header(up) {
-        new_head.push_str(&h);
+        out.push_str(&h);
     }
-    if !is_connect {
-        new_head.push_str("Connection: close\r\n");
+    if !head.is_connect() {
+        out.push_str("Connection: close\r\n");
     }
-    new_head.push_str("\r\n");
+    out.push_str("\r\n");
+    out
+}
 
-    let mut upstream =
-        TcpStream::connect((up.host.as_str(), up.port)).await.with_context(|| format!("upstream {} unreachable", up.label()))?;
-    upstream.write_all(new_head.as_bytes()).await?;
-    upstream.write_all(&buf[head_end..]).await?;
-    copy_bidirectional(&mut client, &mut upstream).await?;
+/// Head for a plain request sent through a SOCKS tunnel: origin-form, no proxy headers.
+fn origin_head(head: &Head, path: &str) -> String {
+    let mut out = format!("{} {} {}\r\n", head.method, path, head.version);
+    for l in head.lines() {
+        let lower = l.to_ascii_lowercase();
+        if lower.starts_with("proxy-authorization:") || lower.starts_with("proxy-connection:") || lower.starts_with("connection:") {
+            continue;
+        }
+        out.push_str(&l);
+        out.push_str("\r\n");
+    }
+    out.push_str("Connection: close\r\n\r\n");
+    out
+}
+
+/// Pipe the browser through an HTTP(S) upstream proxy.
+pub(crate) async fn forward<C, U>(client: &mut C, upstream: &mut U, head: &Head, up: &Upstream) -> Result<()>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+    U: AsyncRead + AsyncWrite + Unpin,
+{
+    upstream.write_all(proxied_head(head, up).as_bytes()).await?;
+    upstream.write_all(&head.extra).await?;
+    upstream.flush().await?;
+    copy_bidirectional(client, upstream).await?;
+    Ok(())
+}
+
+/// Pipe the browser through an established SOCKS tunnel to the request's destination.
+pub(crate) async fn tunnel<C, U>(client: &mut C, upstream: &mut U, head: &Head, path: &str) -> Result<()>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+    U: AsyncRead + AsyncWrite + Unpin,
+{
+    if head.is_connect() {
+        client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await?;
+    } else {
+        upstream.write_all(origin_head(head, path).as_bytes()).await?;
+    }
+    upstream.write_all(&head.extra).await?;
+    upstream.flush().await?;
+    copy_bidirectional(client, upstream).await?;
     Ok(())
 }
 
@@ -74,7 +89,10 @@ pub(crate) async fn handle(mut client: TcpStream, up: &Upstream) -> Result<()> {
 mod tests {
     use super::*;
     use cm_core::ProxyScheme;
-    use tokio::net::TcpListener;
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::{TcpListener, TcpStream},
+    };
 
     /// Fake upstream: records the head it receives and answers 200.
     #[tokio::test]
