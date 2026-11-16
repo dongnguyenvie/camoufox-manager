@@ -10,7 +10,9 @@ the camoufox venv's python:  python <data_dir>/camoufox/helper <command> ...
       Generates the pinned machine ONCE with Camoufox's generator and prints the final
       Camoufox config as JSON. The app stores it in the database.
   launch --profile <launch.json> --user-data <dir> [--proxy URL]
-         [--timezone TZ] [--geo=LAT,LON] [--ip IP] [--headless]   (launch.py)
+         [--timezone TZ] [--geo=LAT,LON] [--ip IP] [--headless] [--locale L]
+         [--webrtc replace|real|forward|none] [--screen WxH] [--window WxH] [--fonts JSON]
+         [--humanize] [--start-url URL] [--canvas stable|random]   (launch.py)
       Opens Camoufox with the persistent profile, prints {"ws": "ws://127.0.0.1:PORT/TOKEN"}
       (Playwright protocol: playwright.firefox.connect(ws)) and runs until stdin closes / "stop".
   cookies ...                                                 (cookies.py, phase 5)
@@ -52,6 +54,14 @@ def main():
     l.add_argument("--geo")
     l.add_argument("--ip")
     l.add_argument("--headless", action="store_true")
+    l.add_argument("--locale")
+    l.add_argument("--webrtc", choices=["replace", "real", "forward", "none"])
+    l.add_argument("--screen")
+    l.add_argument("--window")
+    l.add_argument("--fonts", help="JSON array of extra fonts")
+    l.add_argument("--humanize", action="store_true")
+    l.add_argument("--start-url")
+    l.add_argument("--canvas", choices=["stable", "random"])
     c = sub.add_parser("cookies")
     c.add_argument("action", choices=["export", "import"])
     c.add_argument("--user-data", required=True)

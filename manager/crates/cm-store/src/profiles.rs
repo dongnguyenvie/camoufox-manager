@@ -146,6 +146,24 @@ mod tests {
     use super::{tests_support::sample, *};
 
     #[tokio::test]
+    async fn settings_roundtrip_and_old_rows_read_with_defaults() {
+        use cm_core::{CanvasMode, WebRtcMode};
+        let repo = SqliteProfiles::new(Db::memory().unwrap());
+        let mut p = sample("bb22");
+        p.settings.timezone = Some("Europe/Berlin".into());
+        p.settings.webrtc = WebRtcMode::None;
+        p.settings.fonts = vec!["Foo".into()];
+        p.settings.screen = Some("1600x900".into());
+        p.settings.canvas = CanvasMode::Random;
+        repo.insert(&p).await.unwrap();
+        assert_eq!(repo.get("bb22").await.unwrap().unwrap().settings, p.settings);
+        // A row written before phase 4 (only old fields) reads with the new defaults.
+        repo.db.with(|c| Ok(c.execute("UPDATE profiles SET settings = '{\"locale\":\"fr\"}' WHERE id = 'bb22'", [])?)).unwrap();
+        let s = repo.get("bb22").await.unwrap().unwrap().settings;
+        assert_eq!((s.locale.as_deref(), s.canvas, s.fonts.len()), (Some("fr"), CanvasMode::Stable, 0));
+    }
+
+    #[tokio::test]
     async fn crud() {
         let repo = SqliteProfiles::new(Db::memory().unwrap());
         let p = sample("aa11");

@@ -1,8 +1,56 @@
 //! Pinned machine = the Camoufox config generated once (`navigator.*`, `screen.*`, `webGl:*`,
 //! `fonts`, …). This module reads it for the UI. Phase 4 owns it (pinning details, canvas).
 
-use cm_core::engine::{MachineSummary, StorageFlags};
+use cm_core::{
+    LaunchOptions, WebRtcMode,
+    engine::{MachineSummary, StorageFlags},
+};
 use serde_json::Value;
+use tokio::process::Command;
+
+/// `helper launch` flags for the profile's setting overrides (the pinned machine itself travels in
+/// `launch.json`). Values are passed as separate args, never through a shell.
+pub fn override_args(o: &LaunchOptions) -> Vec<String> {
+    let mut a = Vec::new();
+    let mut flag = |k: &str, v: &str| {
+        a.push(format!("--{k}"));
+        a.push(v.to_string());
+    };
+    if let Some(l) = &o.locale {
+        flag("locale", l);
+    }
+    flag(
+        "webrtc",
+        match o.webrtc {
+            WebRtcMode::Replace => "replace",
+            WebRtcMode::Real => "real",
+            WebRtcMode::Forward => "forward",
+            WebRtcMode::None => "none",
+        },
+    );
+    if let Some(s) = &o.screen {
+        flag("screen", s);
+    }
+    if let Some(w) = &o.window {
+        flag("window", w);
+    }
+    if !o.extra_fonts.is_empty() {
+        flag("fonts", &serde_json::to_string(&o.extra_fonts).unwrap_or_else(|_| "[]".into()));
+    }
+    flag("canvas", if o.canvas_stable { "stable" } else { "random" });
+    if let Some(u) = &o.start_url {
+        // `--start-url=…`: a value starting with `-` must not be read as an option.
+        a.push(format!("--start-url={u}"));
+    }
+    if o.humanize {
+        a.push("--humanize".into());
+    }
+    a
+}
+
+pub fn launch_args(o: &LaunchOptions, cmd: &mut Command) {
+    cmd.args(override_args(o));
+}
 
 fn str_of(c: &Value, k: &str) -> Option<String> {
     c.get(k).and_then(Value::as_str).filter(|s| !s.is_empty()).map(String::from)
@@ -41,6 +89,25 @@ pub fn summarize(c: &Value) -> MachineSummary {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn override_args_cover_settings() {
+        let o = LaunchOptions {
+            locale: Some("de-DE".into()),
+            webrtc: WebRtcMode::None,
+            window: Some("1200x800".into()),
+            extra_fonts: vec!["Foo".into()],
+            humanize: true,
+            start_url: Some("https://example.com".into()),
+            canvas_stable: true,
+            ..Default::default()
+        };
+        let a = override_args(&o);
+        let has = |x: &str| a.iter().any(|v| v == x);
+        assert!(has("--locale") && has("de-DE") && has("none") && has("1200x800") && has("--humanize"));
+        assert!(has("--start-url=https://example.com") && has("stable") && has("[\"Foo\"]"));
+        assert!(!has("--screen"));
+    }
 
     #[test]
     fn summary() {

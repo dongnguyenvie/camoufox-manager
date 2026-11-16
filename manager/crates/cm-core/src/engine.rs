@@ -42,6 +42,18 @@ pub struct LaunchOptions {
     /// Public IP of the proxy, so WebRTC reports it instead of the real one.
     pub public_ip: Option<String>,
     pub headless: Option<bool>,
+    /// Locale such as `de-DE` (override, or derived from the proxy country).
+    pub locale: Option<String>,
+    pub webrtc: crate::profile::WebRtcMode,
+    /// `WxH` screen / window overrides on top of the pinned machine.
+    pub screen: Option<String>,
+    pub window: Option<String>,
+    /// Fonts added to the pinned list.
+    pub extra_fonts: Vec<String>,
+    pub humanize: bool,
+    pub start_url: Option<String>,
+    /// Keep canvas/WebGL readback identical across launches.
+    pub canvas_stable: bool,
 }
 
 /// A running browser, remote-controllable at `ws_url` (protocol: [`Engine::ws_protocol`]).

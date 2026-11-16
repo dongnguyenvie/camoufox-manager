@@ -34,6 +34,7 @@ I18N.add({
     'profiles.start': 'Start',
     'profiles.stop': 'Stop',
     'profiles.delete': 'Delete profile',
+    'profiles.edit': 'Edit profile settings',
     'profiles.started': 'Browser opened',
     'profiles.startedVia': 'Browser opened via {ip}',
     'profiles.stopped': 'Stopped',
@@ -108,6 +109,7 @@ I18N.add({
     'profiles.start': 'Start',
     'profiles.stop': 'Stop',
     'profiles.delete': 'Xoá profile',
+    'profiles.edit': 'Sửa cài đặt profile',
     'profiles.started': 'Đã mở browser',
     'profiles.startedVia': 'Đã mở browser qua {ip}',
     'profiles.stopped': 'Đã dừng',
@@ -188,7 +190,7 @@ const ALL = [
   { h: '', w: 34, k: 'check', v: () => '' },
   { g: 'profiles.group.region', h: 'profiles.col.country', w: 140, k: 'geo', v: p => p.assigned?.geo ? p.assigned.geo.country : '—' },
   { h: 'profiles.col.timezone', w: 150, cls: 'mono', v: tzOf },
-  { h: 'profiles.col.language', w: 80, v: p => langOf(p.fp?.language) },
+  { h: 'profiles.col.language', w: 80, v: p => p.settings?.locale || langOf(p.fp?.language) },
   { g: 'profiles.group.fingerprint', h: 'profiles.col.browser', w: 100, v: p => browserOf(p.fp?.userAgent) },
   { h: 'profiles.col.resolution', w: 104, cls: 'num', v: p => p.fp?.resolution || '—' },
   { h: 'DPR', raw: true, w: 52, cls: 'num', v: p => p.fp?.dpr ?? '—' },
@@ -356,6 +358,8 @@ CM.pages.profiles = {
 
     const dlg = reactive({ open: false, name: '', os: 'win', busy: false });
     const del = reactive({ p: null, busy: false });
+    const edit = reactive({ id: null });
+    const editing = computed(() => (edit.id && o.value?.profiles.find(p => p.id === edit.id)) || null);
     const nameInput = ref(null);
     const openCreate = () => { dlg.open = true; dlg.name = ''; dlg.os = 'win'; nextTick(() => nameInput.value?.focus()); };
     async function create() {
@@ -393,7 +397,7 @@ CM.pages.profiles = {
     });
 
     return {
-      ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, dlg, del, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
+      ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, dlg, del, edit, editing, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
       runCount, view, raw, cellState, selectRow, down, over, dbl, onKey, copyAll, refresh, act, reveal, fmt,
     };
   },
@@ -435,7 +439,7 @@ CM.pages.profiles = {
     <div ref="sheet" tabindex="0" @keydown="onKey" class="min-h-0 overflow-auto bg-panel border border-line rounded-xl shadow-card outline-none">
       <table class="grid-tbl">
         <colgroup>
-          <col style="width:44px"><col v-for="c in ALL" :style="{ width: c.w + 'px' }"><col style="width:142px">
+          <col style="width:44px"><col v-for="c in ALL" :style="{ width: c.w + 'px' }"><col style="width:172px">
         </colgroup>
         <thead>
           <tr class="g">
@@ -504,7 +508,8 @@ CM.pages.profiles = {
               <button v-else class="btn btn-start" :disabled="!!busy[p.id] || !o.providerAvailable" :title="o.providerAvailable ? '' : hint" @click="act('start', p.id)">
                 <span v-if="busy[p.id]" class="spin"></span><template v-else>▶ {{ t('profiles.start') }}</template>
               </button>
-              <button class="icon-btn ml-1" :disabled="!!busy[p.id]" :title="t('profiles.delete')" @click="del.p = p">🗑</button>
+              <button class="icon-btn ml-1" :disabled="!!busy[p.id]" :title="t('profiles.edit')" @click="edit.id = p.id">✎</button>
+              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('profiles.delete')" @click="del.p = p">🗑</button>
             </td>
           </tr>
         </tbody>
@@ -528,6 +533,9 @@ CM.pages.profiles = {
         </button>
       </template>
     </cm-dialog>
+
+    <!-- ===== edit (components/profile-form.js) ===== -->
+    <cm-profile-form :open="!!editing" :profile="editing" @close="edit.id = null" @saved="load()"/>
 
     <!-- ===== delete ===== -->
     <cm-dialog :open="!!del.p" :title="del.p ? t('profiles.deleteTitle', { name: del.p.name }) : ''" :busy="del.busy" @close="del.p = null">

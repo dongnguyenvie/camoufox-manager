@@ -3,8 +3,11 @@
 
 use crate::{Manager, Running, proxies::ProxyView};
 use anyhow::{Context, Result, bail};
-use cm_core::{CmError, EngineHint, LaunchOptions, MachineSummary, NewProfile, Os, Profile, ProfileSettings, ProxyCheck, ProxyId};
-use serde::Serialize;
+use cm_core::{
+    CanvasMode, CmError, EngineHint, LaunchOptions, MachineSummary, NewProfile, Os, Profile, ProfileSettings, ProxyCheck, ProxyId,
+    WebRtcMode,
+};
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, io::Read, path::Path, path::PathBuf};
 
 #[derive(Serialize)]
@@ -127,7 +130,7 @@ impl Manager {
                 assigned: p.proxy_id.and_then(|i| by_id.get(&i).cloned()),
                 running: running.get(&p.id).map(|r| RunningView { ws: r.ws.clone(), port: r.port, started_at: r.started_at }),
                 path: self.path_info(&p.id),
-                fp: self.d.engine.summarize(&p.machine),
+                fp: self.fp_of(&p),
                 timezone: p.settings.timezone.clone(),
                 timezone_by_ip: p.settings.timezone.is_none(),
                 last_activity: p.last_activity.clone().or_else(|| Some(p.created_at.clone())),
@@ -162,7 +165,6 @@ impl Manager {
             let why = status.hint.map(|h| h.detail).unwrap_or_default();
             bail!("{} is not ready: {why}", self.d.engine.name());
         }
-        let mut opts = LaunchOptions::default();
         let (mut port, mut geo) = (None, None);
         if let Some(pid) = profile.proxy_id {
             // Relay up and geo known BEFORE the browser opens: dead proxy → no browser (fail-closed).
@@ -175,16 +177,11 @@ impl Manager {
                     return Err(e.context("proxy check failed, browser not opened"));
                 }
             };
-            // D4: timezone always set together with geolocation.
-            opts.proxy = Some(("127.0.0.1".into(), p));
-            opts.timezone = Some(profile.settings.timezone.clone().unwrap_or_else(|| g.timezone.clone()));
-            opts.geolocation = Some((g.lat, g.lon));
-            opts.public_ip = Some(g.ip.clone());
             port = Some(p);
             geo = Some(g);
-        } else if let Some(tz) = &profile.settings.timezone {
-            opts.timezone = Some(tz.clone());
         }
+        // Proxy-derived geography is the default, the profile's overrides win (D4).
+        let opts = launch_options_for(&profile, geo.as_ref(), port);
         let session = match self.d.engine.launch(&profile, &opts).await {
             Ok(s) => s,
             Err(e) => {
@@ -264,5 +261,383 @@ impl Manager {
             bail!(CmError::NotFound("profile data on disk (never started)".into()));
         }
         Ok(dir)
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Phase 4: edit settings, pinned machine, launch overrides
+// ---------------------------------------------------------------------------------------------
+
+/// What to do with the pinned machine when the requested OS differs from it.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum OsAction {
+    /// Ignore the OS change, keep the machine (and its OS).
+    Keep,
+    /// Pin a brand-new machine of the requested OS.
+    Regenerate,
+}
+
+/// Full editable document of a profile (what the profile form sends).
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProfileEdit {
+    pub name: String,
+    #[serde(default)]
+    pub notes: Option<String>,
+    /// Requested OS; differs from the pinned one → `os_action` is required.
+    #[serde(default)]
+    pub os: Option<String>,
+    #[serde(default)]
+    pub os_action: Option<OsAction>,
+    #[serde(default)]
+    pub settings: ProfileSettings,
+}
+
+fn invalid<T>(msg: impl Into<String>) -> Result<T> {
+    Err(CmError::Invalid(msg.into()).into())
+}
+
+/// `WxH` → (w, h), 200..=10000 each.
+fn parse_size(s: &str, what: &str) -> Result<(u32, u32)> {
+    let parsed =
+        s.to_ascii_lowercase().split_once('x').and_then(|(w, h)| Some((w.trim().parse::<u32>().ok()?, h.trim().parse::<u32>().ok()?)));
+    match parsed {
+        Some((w, h)) if (200..=10_000).contains(&w) && (200..=10_000).contains(&h) => Ok((w, h)),
+        _ => invalid(format!("{what} must look like 1920x1080 (200-10000)")),
+    }
+}
+
+fn clean(s: Option<String>) -> Option<String> {
+    s.map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+/// `de_DE` / `de-de` / `de` → `de-DE` / `de`.
+fn normalize_locale(s: &str) -> Result<String> {
+    let mut parts = s.split(['-', '_']);
+    let (lang, region) = (parts.next().unwrap_or(""), parts.next());
+    let alpha = |v: &str| v.bytes().all(|b| b.is_ascii_alphabetic());
+    let ok_lang = (2..=3).contains(&lang.len()) && alpha(lang);
+    let ok_region = region.is_none_or(|r| (r.len() == 2 && alpha(r)) || (r.len() == 3 && r.bytes().all(|b| b.is_ascii_digit())));
+    if !ok_lang || !ok_region || parts.next().is_some() {
+        return invalid("locale must look like de-DE or fr");
+    }
+    Ok(match region {
+        Some(r) => format!("{}-{}", lang.to_ascii_lowercase(), r.to_ascii_uppercase()),
+        None => lang.to_ascii_lowercase(),
+    })
+}
+
+fn check_timezone_format(s: &str) -> Result<()> {
+    let ok = s.len() <= 64
+        && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'_' | b'-' | b'+'))
+        && (s.contains('/') || matches!(s, "UTC" | "GMT"));
+    if ok { Ok(()) } else { invalid("timezone must be an IANA name such as Europe/Berlin") }
+}
+
+fn fmt_size((w, h): (u32, u32)) -> String {
+    format!("{w}x{h}")
+}
+
+/// Validate and normalise edited settings. `pinned_screen` = the machine's screen (for the
+/// "window fits the screen" check when there is no screen override).
+pub(crate) fn validate_settings(mut s: ProfileSettings, pinned_screen: Option<(u32, u32)>) -> Result<ProfileSettings> {
+    s.locale = clean(s.locale).map(|l| normalize_locale(&l)).transpose()?;
+    s.timezone = clean(s.timezone);
+    if let Some(tz) = &s.timezone {
+        check_timezone_format(tz)?;
+    }
+    let screen = clean(s.screen.take()).map(|v| parse_size(&v, "screen")).transpose()?;
+    let window = clean(s.window.take()).map(|v| parse_size(&v, "window")).transpose()?;
+    if let (Some((ww, wh)), Some((sw, sh))) = (window, screen.or(pinned_screen))
+        && (ww > sw || wh > sh)
+    {
+        return invalid(format!("window {ww}x{wh} does not fit the screen {sw}x{sh}"));
+    }
+    s.screen = screen.map(fmt_size);
+    s.window = window.map(fmt_size);
+    s.start_url = clean(s.start_url);
+    if let Some(u) = &s.start_url {
+        let lower = u.to_ascii_lowercase();
+        if u.len() > 2000 || !(lower.starts_with("http://") || lower.starts_with("https://") || lower == "about:blank") {
+            return invalid("start URL must be http(s)://... or about:blank");
+        }
+    }
+    let mut fonts: Vec<String> = Vec::new();
+    for f in s.fonts.iter().map(|f| f.trim()).filter(|f| !f.is_empty()) {
+        if f.len() > 80 || f.chars().any(char::is_control) {
+            return invalid("invalid font name");
+        }
+        if !fonts.iter().any(|x| x == f) {
+            fonts.push(f.to_string());
+        }
+    }
+    if fonts.len() > 200 {
+        return invalid("at most 200 extra fonts");
+    }
+    s.fonts = fonts;
+    Ok(s)
+}
+
+/// Primary locale of a country (ISO 3166-1 alpha-2): the default when the proxy decides geography.
+fn locale_for_country(cc: &str) -> Option<&'static str> {
+    Some(match cc.to_ascii_uppercase().as_str() {
+        "US" => "en-US",
+        "GB" => "en-GB",
+        "CA" => "en-CA",
+        "AU" => "en-AU",
+        "NZ" => "en-NZ",
+        "IE" => "en-IE",
+        "IN" => "en-IN",
+        "SG" => "en-SG",
+        "ZA" => "en-ZA",
+        "PH" => "en-PH",
+        "DE" => "de-DE",
+        "AT" => "de-AT",
+        "CH" => "de-CH",
+        "FR" => "fr-FR",
+        "BE" => "nl-BE",
+        "NL" => "nl-NL",
+        "ES" => "es-ES",
+        "MX" => "es-MX",
+        "AR" => "es-AR",
+        "CL" => "es-CL",
+        "CO" => "es-CO",
+        "PE" => "es-PE",
+        "IT" => "it-IT",
+        "PT" => "pt-PT",
+        "BR" => "pt-BR",
+        "PL" => "pl-PL",
+        "CZ" => "cs-CZ",
+        "SK" => "sk-SK",
+        "HU" => "hu-HU",
+        "RO" => "ro-RO",
+        "BG" => "bg-BG",
+        "GR" => "el-GR",
+        "TR" => "tr-TR",
+        "UA" => "uk-UA",
+        "RU" => "ru-RU",
+        "SE" => "sv-SE",
+        "NO" => "nb-NO",
+        "DK" => "da-DK",
+        "FI" => "fi-FI",
+        "JP" => "ja-JP",
+        "KR" => "ko-KR",
+        "CN" => "zh-CN",
+        "TW" => "zh-TW",
+        "HK" => "zh-HK",
+        "TH" => "th-TH",
+        "VN" => "vi-VN",
+        "ID" => "id-ID",
+        "MY" => "ms-MY",
+        "IL" => "he-IL",
+        "SA" => "ar-SA",
+        "AE" => "ar-AE",
+        "EG" => "ar-EG",
+        "IR" => "fa-IR",
+        "PK" => "ur-PK",
+        "BD" => "bn-BD",
+        _ => return None,
+    })
+}
+
+/// Launch options for a profile: the proxy-derived geography is the default, the profile's own
+/// overrides win. D4: geolocation is only ever sent together with a timezone, and only while that
+/// timezone is the proxy's (coordinates of one place next to the clock of another is a tell).
+pub(crate) fn launch_options_for(p: &Profile, geo: Option<&ProxyCheck>, port: Option<u16>) -> LaunchOptions {
+    let s = &p.settings;
+    let mut o = LaunchOptions {
+        proxy: port.map(|port| ("127.0.0.1".to_string(), port)),
+        public_ip: geo.map(|g| g.ip.clone()),
+        webrtc: s.webrtc,
+        screen: s.screen.clone(),
+        window: s.window.clone(),
+        extra_fonts: s.fonts.clone(),
+        humanize: s.humanize.unwrap_or(false),
+        start_url: s.start_url.clone(),
+        canvas_stable: s.canvas == CanvasMode::Stable,
+        ..Default::default()
+    };
+    o.timezone = s.timezone.clone().or_else(|| geo.map(|g| g.timezone.clone()).filter(|t| !t.is_empty()));
+    if let (Some(g), Some(tz)) = (geo, &o.timezone)
+        && *tz == g.timezone
+    {
+        o.geolocation = Some((g.lat, g.lon));
+    }
+    o.locale = s.locale.clone().or_else(|| geo.and_then(|g| locale_for_country(&g.country_code)).map(String::from));
+    o
+}
+
+fn webrtc_code(m: WebRtcMode) -> &'static str {
+    match m {
+        WebRtcMode::Replace => "replace",
+        WebRtcMode::Real => "real",
+        WebRtcMode::Forward => "forward",
+        WebRtcMode::None => "none",
+    }
+}
+
+impl Manager {
+    /// Read-only machine summary plus what the settings decide at launch.
+    fn fp_of(&self, p: &Profile) -> MachineSummary {
+        let mut fp = self.d.engine.summarize(&p.machine);
+        let canvas = if p.settings.canvas == CanvasMode::Stable { "stable" } else { "random" };
+        fp.noise.canvas = Some(canvas.into());
+        fp.noise.webgl = Some(canvas.into());
+        fp.noise.audio = Some("native".into());
+        fp.webrtc = Some(webrtc_code(p.settings.webrtc).into());
+        fp
+    }
+
+    fn pinned_screen(&self, p: &Profile) -> Option<(u32, u32)> {
+        parse_size(self.d.engine.summarize(&p.machine).resolution.as_deref()?, "screen").ok()
+    }
+
+    async fn view(&self, id: &str) -> Result<ProfileView> {
+        self.overview().await.profiles.into_iter().find(|v| v.id == id).context("profile vanished")
+    }
+
+    /// One profile (same shape as an overview row).
+    pub async fn profile_view(&self, id: &str) -> Result<ProfileView> {
+        self.profile(id).await?;
+        self.view(id).await
+    }
+
+    /// Save the edited document. OS different from the pinned one needs an explicit [`OsAction`].
+    pub async fn update_profile(&self, id: &str, edit: ProfileEdit) -> Result<ProfileView> {
+        let mut p = self.profile(id).await?;
+        let name = edit.name.trim();
+        if name.is_empty() || name.chars().count() > 80 {
+            return invalid("profile name must be 1-80 characters");
+        }
+        let notes = clean(edit.notes);
+        if notes.as_ref().is_some_and(|n| n.chars().count() > 2000) {
+            return invalid("notes are limited to 2000 characters");
+        }
+        let want = match edit.os.as_deref() {
+            Some(o) => Os::parse(o).ok_or_else(|| CmError::Invalid("os must be win, mac or lin".into()))?,
+            None => p.os,
+        };
+        let mut regenerate = None;
+        if want != p.os {
+            match edit.os_action {
+                Some(OsAction::Keep) => {}
+                Some(OsAction::Regenerate) => regenerate = Some(want),
+                None => {
+                    bail!(CmError::Conflict(format!(
+                        "OS {} differs from the pinned machine ({}): choose osAction keep or regenerate",
+                        want.code(),
+                        p.os.code()
+                    )))
+                }
+            }
+        }
+        if regenerate.is_some() && self.running.lock().await.contains_key(id) {
+            bail!(CmError::Conflict("stop the profile before pinning a new machine".into()));
+        }
+        if let Some(os) = regenerate {
+            p.machine = self.d.engine.generate(os).await?;
+            p.os = os;
+        }
+        p.settings = validate_settings(edit.settings, self.pinned_screen(&p))?;
+        p.name = name.to_string();
+        p.notes = notes;
+        p.updated_at = self.d.clock.now_iso();
+        self.d.profiles.update(&p).await?;
+        self.view(id).await
+    }
+
+    /// Pin a fresh machine (new hardware, screen, GPU, fonts) of `os` (default: the current OS).
+    pub async fn regenerate_machine(&self, id: &str, os: Option<&str>) -> Result<ProfileView> {
+        let mut p = self.profile(id).await?;
+        if self.running.lock().await.contains_key(id) {
+            bail!(CmError::Conflict("stop the profile before pinning a new machine".into()));
+        }
+        let os = match os {
+            Some(o) => Os::parse(o).ok_or_else(|| CmError::Invalid("os must be win, mac or lin".into()))?,
+            None => p.os,
+        };
+        p.machine = self.d.engine.generate(os).await?;
+        p.os = os;
+        // Screen/window overrides belonged to the old machine and may not fit the new one.
+        if validate_settings(p.settings.clone(), self.pinned_screen(&p)).is_err() {
+            p.settings.screen = None;
+            p.settings.window = None;
+        }
+        p.updated_at = self.d.clock.now_iso();
+        self.d.profiles.update(&p).await?;
+        self.view(id).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn check(tz: &str, cc: &str) -> ProxyCheck {
+        ProxyCheck { ip: "9.9.9.9".into(), country_code: cc.into(), timezone: tz.into(), lat: -23.5, lon: -46.6, ..Default::default() }
+    }
+
+    fn profile(settings: ProfileSettings) -> Profile {
+        Profile {
+            id: "aa".into(),
+            name: "n".into(),
+            os: Os::Mac,
+            notes: None,
+            created_at: String::new(),
+            updated_at: String::new(),
+            last_activity: None,
+            proxy_id: None,
+            machine: serde_json::json!({}),
+            settings,
+        }
+    }
+
+    #[test]
+    fn proxy_geography_is_the_default() {
+        let o = launch_options_for(&profile(Default::default()), Some(&check("America/Sao_Paulo", "BR")), Some(31000));
+        assert_eq!(o.timezone.as_deref(), Some("America/Sao_Paulo"));
+        assert_eq!(o.geolocation, Some((-23.5, -46.6)));
+        assert_eq!(o.locale.as_deref(), Some("pt-BR"));
+        assert_eq!(o.public_ip.as_deref(), Some("9.9.9.9"));
+        assert!(o.canvas_stable);
+    }
+
+    #[test]
+    fn overrides_win_and_geolocation_never_without_timezone() {
+        let s = ProfileSettings { timezone: Some("Europe/Berlin".into()), locale: Some("de-DE".into()), ..Default::default() };
+        let o = launch_options_for(&profile(s), Some(&check("America/Sao_Paulo", "BR")), Some(1));
+        assert_eq!(o.timezone.as_deref(), Some("Europe/Berlin"));
+        assert_eq!(o.locale.as_deref(), Some("de-DE"));
+        assert_eq!(o.geolocation, None, "proxy coordinates next to another timezone would be a tell");
+        // proxy without a known timezone: no timezone, so no geolocation either
+        let o = launch_options_for(&profile(Default::default()), Some(&check("", "BR")), Some(1));
+        assert!(o.timezone.is_none() && o.geolocation.is_none());
+        // no proxy at all: nothing derived, only overrides
+        let o = launch_options_for(&profile(Default::default()), None, None);
+        assert!(o.timezone.is_none() && o.locale.is_none() && o.proxy.is_none());
+    }
+
+    #[test]
+    fn settings_validation() {
+        let ok = validate_settings(
+            ProfileSettings {
+                locale: Some(" de_de ".into()),
+                window: Some("1200X800".into()),
+                fonts: vec![" A ".into(), "A".into(), "".into()],
+                ..Default::default()
+            },
+            Some((1920, 1080)),
+        )
+        .unwrap();
+        assert_eq!(ok.locale.as_deref(), Some("de-DE"));
+        assert_eq!(ok.window.as_deref(), Some("1200x800"));
+        assert_eq!(ok.fonts, vec!["A".to_string()]);
+        let bad = |s: ProfileSettings| validate_settings(s, Some((1920, 1080))).is_err();
+        assert!(bad(ProfileSettings { window: Some("2000x800".into()), ..Default::default() }), "window larger than screen");
+        assert!(bad(ProfileSettings { timezone: Some("Berlin".into()), ..Default::default() }));
+        assert!(bad(ProfileSettings { start_url: Some("file:///etc/passwd".into()), ..Default::default() }));
+        assert!(bad(ProfileSettings { locale: Some("x".into()), ..Default::default() }));
+        assert!(!bad(ProfileSettings { screen: Some("2560x1440".into()), window: Some("2400x1300".into()), ..Default::default() }));
     }
 }

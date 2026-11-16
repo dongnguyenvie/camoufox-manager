@@ -1,5 +1,5 @@
-"""`launch`: open Camoufox with the persistent profile, the pinned machine and the app's
-proxy/timezone/geo, print the Playwright ws endpoint, run until told to stop.
+"""`launch`: open Camoufox with the persistent profile, the pinned machine, the profile's setting
+overrides and the app's proxy/timezone/geo, print the Playwright ws endpoint, run until told to stop.
 
 --profile is a JSON file {"id": ..., "config": {...pinned Camoufox config...}} written by the
 app before each launch. Exits when stdin closes or a line "stop" arrives (graceful close),
@@ -12,7 +12,7 @@ import os
 import signal
 import sys
 
-from common import decode_chunks, emit, encode_chunks
+from common import apply_screen, check_timezone, decode_chunks, emit, encode_chunks, parse_size
 
 
 async def cmd_launch(args):
@@ -23,9 +23,35 @@ async def cmd_launch(args):
         profile = json.load(f)
     config = dict(profile["config"])
 
+    # ---- overrides from the profile settings, applied on top of the pinned machine ----
+    # Hardware stays pinned; only what the user explicitly set changes, so the identity holds.
+    if args.screen:
+        apply_screen(config, parse_size(args.screen, "screen"))
+    if args.window:
+        w, h = parse_size(args.window, "window")
+        config["window.outerWidth"], config["window.outerHeight"] = w, h
+    if args.fonts:
+        extra = json.loads(args.fonts)
+        config["fonts"] = list(dict.fromkeys([*(config.get("fonts") or []), *extra]))
+    if args.timezone:
+        check_timezone(args.timezone)
+    kwargs = {}
+    # Always pass a locale: Firefox keeps intl.* prefs in the persistent profile, so a locale set
+    # once would stick after the override is cleared. Camoufox's own default is en-US.
+    kwargs["locale"] = (args.locale or "en-US").replace("_", "-")
+    if args.humanize:
+        kwargs["humanize"] = True
+    if args.webrtc == "none":
+        kwargs["block_webrtc"] = True
+    if args.canvas == "stable":
+        # Camoufox >= 0.5.9 covers canvas/WebGL readback with random data by default (a new value
+        # on every read and launch; `canvas:seed` is gone upstream). canvas_noise=False keeps the
+        # host's native rendering, identical on every launch (measured in the phase 4 report).
+        kwargs["canvas_noise"] = False
+
     # Identical launch_options inputs every time -> the fingerprint (fonts, GPU, voices...) stays.
     # geoip=False so Camoufox does not look up the IP itself and override the app's geo/timezone.
-    opts = launch_options(config=config, headless=args.headless, geoip=False, i_know_what_im_doing=True)
+    opts = launch_options(config=config, headless=args.headless, geoip=False, i_know_what_im_doing=True, **kwargs)
 
     # Geo/timezone/IP of the proxy are applied AFTER, without touching the fingerprint seed.
     env = opts["env"]
@@ -35,7 +61,8 @@ async def cmd_launch(args):
         del cfg[k]
     if args.timezone:
         cfg["timezone"] = args.timezone
-    if args.geo:
+    # D4: never set geolocation without a timezone (the host timezone would leak next to it).
+    if args.geo and args.timezone:
         lat, lon = (float(x) for x in args.geo.split(","))
         cfg["geolocation:latitude"] = lat
         cfg["geolocation:longitude"] = lon
@@ -43,16 +70,22 @@ async def cmd_launch(args):
         prefs["permissions.default.geo"] = 1
     else:
         prefs["permissions.default.geo"] = 0
-    if args.ip:
+    mode = args.webrtc or "replace"
+    if args.ip and mode == "replace":
         # WebRTC reports the proxy IP instead of the real one.
         cfg["webrtc:ipv4"] = args.ip
     if args.proxy:
         opts["proxy"] = {"server": args.proxy}
-        # No separate WebRTC path (direct UDP) when a proxy is set.
-        prefs["media.peerconnection.ice.proxy_only_if_behind_proxy"] = True
+        # replace / none: no separate WebRTC path (direct UDP) when a proxy is set.
+        # real: leave UDP direct so the real IP shows. forward: Firefox defaults untouched.
+        if mode in ("replace", "none"):
+            prefs["media.peerconnection.ice.proxy_only_if_behind_proxy"] = True
+        elif mode == "real":
+            prefs["media.peerconnection.ice.proxy_only_if_behind_proxy"] = False
     else:
         opts.pop("proxy", None)
-        prefs["media.peerconnection.ice.proxy_only_if_behind_proxy"] = False
+        if mode != "forward":
+            prefs["media.peerconnection.ice.proxy_only_if_behind_proxy"] = False
     encode_chunks(env, "CAMOU_CONFIG_", cfg)
     encode_chunks(env, "CAMOU_PREFS_", prefs)
 
@@ -74,8 +107,12 @@ async def cmd_launch(args):
     async with async_playwright() as p:
         ctx = await p.firefox.launch_persistent_context(args.user_data, **opts)
         ctx.on("close", lambda _: stop.set())  # user closed the last window -> Firefox exits
-        if not ctx.pages:
-            await ctx.new_page()
+        page = ctx.pages[0] if ctx.pages else await ctx.new_page()
+        if args.start_url:
+            try:
+                await page.goto(args.start_url, wait_until="commit", timeout=20000)
+            except Exception:  # an unreachable start page must not stop the browser
+                pass
         bound = await ctx.browser.bind(f"profile-{profile.get('id', '')}", host="127.0.0.1", port=0)
         emit({"ws": bound["endpoint"], "pid": os.getpid()})
         stdin_task = asyncio.create_task(watch_stdin())

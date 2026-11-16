@@ -49,6 +49,17 @@ pub enum WebRtcMode {
     None,
 }
 
+/// How canvas / WebGL readback noise behaves across launches.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CanvasMode {
+    /// Native rendering of the host, identical on every launch (default; see phase 4 report).
+    #[default]
+    Stable,
+    /// Camoufox's own random noise, different on every launch.
+    Random,
+}
+
 /// User-editable settings. Every field is an override: `None` = follow the machine / proxy.
 /// Stored as JSON, so new fields are additive and old rows read with defaults.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -61,6 +72,11 @@ pub struct ProfileSettings {
     pub webrtc: WebRtcMode,
     /// Window size `WxH`; `None` = engine default for the pinned screen.
     pub window: Option<String>,
+    /// Screen size override `WxH` on top of the pinned machine; `None` = pinned screen.
+    pub screen: Option<String>,
+    /// Extra fonts added to the pinned font list at launch.
+    pub fonts: Vec<String>,
+    pub canvas: CanvasMode,
     /// Page opened on start.
     pub start_url: Option<String>,
     pub humanize: Option<bool>,

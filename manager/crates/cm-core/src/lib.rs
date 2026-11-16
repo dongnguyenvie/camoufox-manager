@@ -38,7 +38,7 @@ pub use clock::{Clock, SystemClock};
 pub use engine::{Engine, EngineHint, EngineStatus, LaunchOptions, MachineSummary, Session};
 pub use error::{CmError, not_implemented};
 pub use org::{Group, GroupRepo, SavedView, SavedViewRepo, Tag, TagRepo};
-pub use profile::{NewProfile, Os, Profile, ProfileRepo, ProfileSettings, WebRtcMode};
+pub use profile::{CanvasMode, NewProfile, Os, Profile, ProfileRepo, ProfileSettings, WebRtcMode};
 pub use proxy::{NewProxy, Proxy, ProxyCheck, ProxyChecker, ProxyId, ProxyRepo, ProxyScheme};
 pub use schedule::{Schedule, ScheduleAction, ScheduleKind, ScheduleRepo, ScheduleRun, ScheduleRunOutcome};
 pub use settings::SettingsRepo;

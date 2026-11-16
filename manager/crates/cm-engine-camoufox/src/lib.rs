@@ -141,7 +141,8 @@ impl Engine for Camoufox {
         if let Some(tz) = &opts.timezone {
             cmd.arg("--timezone").arg(tz);
         }
-        if let Some((lat, lon)) = opts.geolocation {
+        // D4: geolocation only together with a timezone (the helper enforces it too).
+        if let (Some((lat, lon)), Some(_)) = (opts.geolocation, &opts.timezone) {
             // `--geo=…` form: a negative latitude/longitude (south/west) starts with `-`; as a
             // separate argument argparse would take it for a new option.
             cmd.arg(format!("--geo={lat},{lon}"));
@@ -149,6 +150,7 @@ impl Engine for Camoufox {
         if let Some(ip) = &opts.public_ip {
             cmd.arg("--ip").arg(ip);
         }
+        machine::launch_args(opts, &mut cmd);
         if opts.headless.unwrap_or(self.headless) {
             cmd.arg("--headless");
         }

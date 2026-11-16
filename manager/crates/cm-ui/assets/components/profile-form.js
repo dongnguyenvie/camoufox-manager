@@ -1,6 +1,330 @@
-/* Profile form (phase 4) — stub until that phase lands.
-   Scope: edit name, notes, OS, screen, window size, locale/timezone override, WebRTC mode, fonts,
-   humanize, start URL; pinned machine shown read-only; OS change offers keep machine / new machine.
-   Register components as CM.components.CmProfileForm… and messages under "profileform.*" here. */
+/* Profile form (phase 4): edit a profile in a dialog.
+   <cm-profile-form :open="b" :profile="view" @close="b = false" @saved="reload"/>
+   `profile` is a row of /api/overview (kept live by the page's polling; the form copies it when it
+   opens, so polling never overwrites what you are typing).
+   Editable: name, notes, OS, start URL, screen, window size, locale/timezone override, WebRTC
+   mode, extra fonts, humanize, canvas mode. The pinned machine is shown read-only; changing the OS
+   asks "keep machine" vs "new machine", and "Regenerate machine" is always explicit. */
 
-I18N.add({ en: {}, vi: {} });
+I18N.add({
+  en: {
+    'profileform.title': 'Edit profile',
+    'profileform.running': 'This profile is running. Changes apply the next time it starts.',
+    'profileform.section.general': 'General',
+    'profileform.section.display': 'Screen and window',
+    'profileform.section.region': 'Region',
+    'profileform.section.network': 'WebRTC',
+    'profileform.section.fingerprint': 'Fingerprint',
+    'profileform.section.machine': 'Pinned machine',
+    'profileform.name': 'Name',
+    'profileform.notes': 'Notes',
+    'profileform.os': 'Operating system',
+    'profileform.osHint': 'Changing it asks whether to keep the pinned machine or pin a new one.',
+    'profileform.startUrl': 'Start URL',
+    'profileform.startUrlHint': 'Opened when the browser starts. Empty = the browser default.',
+    'profileform.screen': 'Screen size',
+    'profileform.screenHint': 'Empty = the pinned screen ({res}). Format 1920x1080.',
+    'profileform.window': 'Window size',
+    'profileform.windowHint': 'Empty = fills the screen. Must fit inside the screen.',
+    'profileform.locale': 'Locale',
+    'profileform.localeHint': 'Empty = follows the proxy country. Example: de-DE.',
+    'profileform.timezone': 'Timezone',
+    'profileform.timezoneHint': 'Empty = follows the proxy. Geolocation is only sent together with the proxy timezone.',
+    'profileform.followsProxy': 'proxy: {value}',
+    'profileform.noProxyValue': 'no proxy: browser default',
+    'profileform.webrtc': 'WebRTC mode',
+    'profileform.webrtc.replace': 'Replace: report the proxy IP',
+    'profileform.webrtc.real': 'Real: report the real IP',
+    'profileform.webrtc.forward': 'Forward: leave WebRTC untouched',
+    'profileform.webrtc.none': 'None: disable WebRTC',
+    'profileform.fonts': 'Extra fonts',
+    'profileform.fontsHint': 'One per line, added to the pinned font list ({n} fonts).',
+    'profileform.humanize': 'Humanize cursor movement',
+    'profileform.canvas': 'Canvas and WebGL',
+    'profileform.canvas.stable': 'Stable: same result on every launch',
+    'profileform.canvas.random': 'Random: new noise on every launch',
+    'profileform.canvasHint': 'Stable uses the native rendering of this Mac, so profiles on this Mac share the same canvas hash. Random differs per launch, which sites can notice.',
+    'profileform.machineHint': 'Frozen when the profile was created. Read-only.',
+    'profileform.m.os': 'OS',
+    'profileform.m.ua': 'User-Agent',
+    'profileform.m.platform': 'Platform',
+    'profileform.m.resolution': 'Screen',
+    'profileform.m.dpr': 'Pixel ratio',
+    'profileform.m.cpu': 'CPU cores',
+    'profileform.m.gpu': 'GPU',
+    'profileform.m.fonts': 'Fonts',
+    'profileform.m.language': 'Language',
+    'profileform.regenerate': 'Regenerate machine…',
+    'profileform.regenerateStopFirst': 'Stop the profile before pinning a new machine',
+    'profileform.regenTitle': 'Pin a new machine?',
+    'profileform.regenBody': 'Screen, GPU, CPU, fonts and the rest of the hardware fingerprint are replaced by a new set. Sites that saw the old machine will see a different device, so existing logins may be questioned.',
+    'profileform.regenOs': 'Operating system of the new machine',
+    'profileform.regenConfirm': 'Pin new machine',
+    'profileform.regenerated': 'Pinned a new machine',
+    'profileform.osTitle': 'Operating system changed',
+    'profileform.osBody': 'The pinned machine is {from}. You chose {to}. What should happen?',
+    'profileform.osKeep': 'Keep machine ({from})',
+    'profileform.osKeepHint': 'No fingerprint change. The OS stays {from}.',
+    'profileform.osNew': 'New {to} machine',
+    'profileform.osNewHint': 'Pins fresh {to} hardware: new screen, GPU, cores and fonts.',
+    'profileform.saved': 'Profile saved',
+    'profileform.saving': 'Saving…',
+  },
+  vi: {
+    'profileform.title': 'Sửa profile',
+    'profileform.running': 'Profile đang chạy. Thay đổi có hiệu lực ở lần mở tiếp theo.',
+    'profileform.section.general': 'Chung',
+    'profileform.section.display': 'Màn hình và cửa sổ',
+    'profileform.section.region': 'Vùng',
+    'profileform.section.network': 'WebRTC',
+    'profileform.section.fingerprint': 'Fingerprint',
+    'profileform.section.machine': 'Máy đã ghim',
+    'profileform.name': 'Tên',
+    'profileform.notes': 'Ghi chú',
+    'profileform.os': 'Hệ điều hành',
+    'profileform.osHint': 'Đổi sẽ hỏi giữ máy đã ghim hay ghim máy mới.',
+    'profileform.startUrl': 'URL mở đầu',
+    'profileform.startUrlHint': 'Mở khi browser khởi động. Để trống = mặc định của browser.',
+    'profileform.screen': 'Kích thước màn hình',
+    'profileform.screenHint': 'Để trống = màn hình đã ghim ({res}). Dạng 1920x1080.',
+    'profileform.window': 'Kích thước cửa sổ',
+    'profileform.windowHint': 'Để trống = chiếm cả màn hình. Phải nằm trong màn hình.',
+    'profileform.locale': 'Locale',
+    'profileform.localeHint': 'Để trống = theo quốc gia của proxy. Ví dụ: de-DE.',
+    'profileform.timezone': 'Múi giờ',
+    'profileform.timezoneHint': 'Để trống = theo proxy. Vị trí địa lý chỉ gửi cùng múi giờ của proxy.',
+    'profileform.followsProxy': 'proxy: {value}',
+    'profileform.noProxyValue': 'không proxy: mặc định của browser',
+    'profileform.webrtc': 'Chế độ WebRTC',
+    'profileform.webrtc.replace': 'Replace: báo IP của proxy',
+    'profileform.webrtc.real': 'Real: báo IP thật',
+    'profileform.webrtc.forward': 'Forward: để WebRTC nguyên trạng',
+    'profileform.webrtc.none': 'None: tắt WebRTC',
+    'profileform.fonts': 'Font thêm',
+    'profileform.fontsHint': 'Mỗi dòng một font, thêm vào danh sách font đã ghim ({n} font).',
+    'profileform.humanize': 'Di chuyển chuột giống người',
+    'profileform.canvas': 'Canvas và WebGL',
+    'profileform.canvas.stable': 'Ổn định: kết quả giống nhau mỗi lần mở',
+    'profileform.canvas.random': 'Ngẫu nhiên: nhiễu mới mỗi lần mở',
+    'profileform.canvasHint': 'Ổn định dùng cách vẽ gốc của máy Mac này, nên các profile trên máy này có cùng hash canvas. Ngẫu nhiên đổi mỗi lần mở, website có thể nhận ra.',
+    'profileform.machineHint': 'Được cố định khi tạo profile. Chỉ xem.',
+    'profileform.m.os': 'HĐH',
+    'profileform.m.ua': 'User-Agent',
+    'profileform.m.platform': 'Platform',
+    'profileform.m.resolution': 'Màn hình',
+    'profileform.m.dpr': 'Tỉ lệ điểm ảnh',
+    'profileform.m.cpu': 'Số nhân CPU',
+    'profileform.m.gpu': 'GPU',
+    'profileform.m.fonts': 'Font',
+    'profileform.m.language': 'Ngôn ngữ',
+    'profileform.regenerate': 'Tạo lại máy…',
+    'profileform.regenerateStopFirst': 'Stop profile trước khi ghim máy mới',
+    'profileform.regenTitle': 'Ghim máy mới?',
+    'profileform.regenBody': 'Màn hình, GPU, CPU, font và phần cứng còn lại sẽ được thay bằng bộ mới. Website từng thấy máy cũ sẽ thấy một thiết bị khác, nên đăng nhập hiện có có thể bị hỏi lại.',
+    'profileform.regenOs': 'Hệ điều hành của máy mới',
+    'profileform.regenConfirm': 'Ghim máy mới',
+    'profileform.regenerated': 'Đã ghim máy mới',
+    'profileform.osTitle': 'Đã đổi hệ điều hành',
+    'profileform.osBody': 'Máy đã ghim là {from}. Bạn chọn {to}. Làm gì tiếp?',
+    'profileform.osKeep': 'Giữ máy ({from})',
+    'profileform.osKeepHint': 'Không đổi fingerprint. HĐH vẫn là {from}.',
+    'profileform.osNew': 'Máy {to} mới',
+    'profileform.osNewHint': 'Ghim phần cứng {to} mới: màn hình, GPU, số nhân và font mới.',
+    'profileform.saved': 'Đã lưu profile',
+    'profileform.saving': 'Đang lưu…',
+  },
+});
+
+{ // file-local scope: classic scripts share one global scope
+const OSES = [{ k: 'win', t: 'Windows' }, { k: 'mac', t: 'macOS' }, { k: 'lin', t: 'Linux' }];
+const osLabel = k => OSES.find(o => o.k === k)?.t || k;
+const WEBRTC = ['replace', 'real', 'forward', 'none'];
+const COMMON_LOCALES = ['en-US', 'en-GB', 'de-DE', 'fr-FR', 'es-ES', 'it-IT', 'pt-BR', 'nl-NL', 'pl-PL', 'ru-RU', 'tr-TR', 'ja-JP', 'ko-KR', 'zh-CN', 'vi-VN', 'th-TH', 'id-ID'];
+const timezones = () => { try { return Intl.supportedValuesOf('timeZone'); } catch (_) { return []; } };
+
+CM.components.CmProfileForm = {
+  props: { open: Boolean, profile: Object },
+  emits: ['close', 'saved'],
+  setup(props, { emit }) {
+    const { reactive, ref, computed, watch } = Vue;
+    const f = reactive({ name: '', notes: '', os: 'win', startUrl: '', screen: '', window: '', locale: '', timezone: '', webrtc: 'replace', fonts: '', humanize: false, canvas: 'stable' });
+    const view = ref(null);          // snapshot shown in the machine panel (replaced after a regenerate)
+    const busy = ref(false), error = ref(''), osPrompt = ref(false);
+    const regen = reactive({ open: false, os: 'win', busy: false });
+
+    function seed(p) {
+      view.value = p;
+      const s = p.settings || {};
+      Object.assign(f, {
+        name: p.name, notes: p.notes || '', os: p.os, startUrl: s.startUrl || '', screen: s.screen || '', window: s.window || '',
+        locale: s.locale || '', timezone: s.timezone || '', webrtc: s.webrtc || 'replace', fonts: (s.fonts || []).join('\n'),
+        humanize: !!s.humanize, canvas: s.canvas || 'stable',
+      });
+      error.value = '';
+    }
+    // Copy once per opening (or when another profile is opened), never on every poll.
+    // The watched value is a primitive (id while open), so a poll that swaps the profile object
+    // for a fresh copy of the same profile does not retrigger it.
+    watch(() => (props.open && props.profile ? props.profile.id : null), id => {
+      if (id) seed(props.profile);
+      osPrompt.value = false; regen.open = false;
+    }, { immediate: true });
+
+    const running = computed(() => !!props.profile?.running);
+    const fp = computed(() => view.value?.fp || {});
+    const proxyTz = computed(() => props.profile?.assigned?.geo?.timezone);
+    const proxyLocale = computed(() => props.profile?.assigned?.geo?.countryCode);
+    const tzPlaceholder = computed(() => proxyTz.value ? t('profileform.followsProxy', { value: proxyTz.value }) : t('profileform.noProxyValue'));
+    const localePlaceholder = computed(() => proxyLocale.value ? t('profileform.followsProxy', { value: proxyLocale.value }) : t('profileform.noProxyValue'));
+    const machineRows = computed(() => {
+      const m = fp.value;
+      return [
+        ['profileform.m.os', osLabel(view.value?.os)],
+        ['profileform.m.ua', m.userAgent], ['profileform.m.platform', m.platform], ['profileform.m.resolution', m.resolution],
+        ['profileform.m.dpr', m.dpr], ['profileform.m.cpu', m.cpu],
+        ['profileform.m.gpu', [m.webglVendor, m.webglRenderer].filter(Boolean).join(' / ')],
+        ['profileform.m.fonts', m.fonts], ['profileform.m.language', m.language],
+      ].filter(r => r[1] !== undefined && r[1] !== null && r[1] !== '');
+    });
+    const osFrom = computed(() => osLabel(props.profile?.os));
+    const osTo = computed(() => osLabel(f.os));
+    const tzList = timezones();
+
+    const body = osAction => ({
+      name: f.name.trim(), notes: f.notes, os: f.os, osAction,
+      settings: {
+        locale: f.locale.trim() || null, timezone: f.timezone.trim() || null, webrtc: f.webrtc,
+        window: f.window.trim() || null, screen: f.screen.trim() || null, startUrl: f.startUrl.trim() || null,
+        humanize: f.humanize, fonts: f.fonts.split('\n').map(x => x.trim()).filter(Boolean), canvas: f.canvas,
+      },
+    });
+    async function save(osAction) {
+      if (busy.value || !f.name.trim()) return;
+      if (f.os !== props.profile.os && !osAction) { osPrompt.value = true; return; }
+      osPrompt.value = false; busy.value = true; error.value = '';
+      try {
+        await api(`/api/profiles/${props.profile.id}`, { method: 'PUT', body: JSON.stringify(body(osAction)) });
+        toast(t('profileform.saved'));
+        emit('saved'); emit('close');
+      } catch (e) { error.value = e.message; }
+      busy.value = false;
+    }
+    const openRegen = () => { regen.os = view.value?.os || 'win'; regen.open = true; };
+    async function regenerate() {
+      regen.busy = true; error.value = '';
+      try {
+        const r = await api(`/api/profiles/${props.profile.id}/regenerate-machine`, { method: 'POST', body: JSON.stringify({ os: regen.os }) });
+        seed(r);
+        toast(t('profileform.regenerated'));
+        regen.open = false; emit('saved');
+      } catch (e) { error.value = e.message; regen.open = false; }
+      regen.busy = false;
+    }
+
+    return { f, OSES, WEBRTC, COMMON_LOCALES, tzList, busy, error, osPrompt, regen, running, fp, view, machineRows, tzPlaceholder, localePlaceholder, osFrom, osTo, save, openRegen, regenerate };
+  },
+  template: `<div>
+    <cm-dialog :open="open && !regen.open && !osPrompt" :title="t('profileform.title')" :busy="busy" :width="680" @close="$emit('close')">
+      <div v-if="running" class="banner !m-0"><cm-icon name="alert"/><div>{{ t('profileform.running') }}</div></div>
+      <form id="profile-form" class="flex flex-col gap-4 max-h-[68vh] overflow-auto pr-1" @submit.prevent="save()">
+        <fieldset class="m-0 p-0 border-0 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+          <legend class="col-span-full text-[11px] uppercase tracking-wide text-faint font-semibold mb-1 p-0">{{ t('profileform.section.general') }}</legend>
+          <cm-field :label="t('profileform.name')"><input class="input" v-model="f.name" maxlength="80" autocomplete="off"></cm-field>
+          <cm-field :label="t('profileform.os')" :hint="t('profileform.osHint')">
+            <select class="input" v-model="f.os"><option v-for="x in OSES" :key="x.k" :value="x.k">{{ x.t }}</option></select>
+          </cm-field>
+          <cm-field class="col-span-full" :label="t('profileform.notes')"><textarea class="input" rows="2" v-model="f.notes" maxlength="2000"></textarea></cm-field>
+          <cm-field class="col-span-full" :label="t('profileform.startUrl')" :hint="t('profileform.startUrlHint')">
+            <input class="input" v-model="f.startUrl" placeholder="https://" autocomplete="off" spellcheck="false">
+          </cm-field>
+        </fieldset>
+
+        <fieldset class="m-0 p-0 border-0 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+          <legend class="col-span-full text-[11px] uppercase tracking-wide text-faint font-semibold mb-1 p-0">{{ t('profileform.section.display') }}</legend>
+          <cm-field :label="t('profileform.screen')" :hint="t('profileform.screenHint', { res: fp.resolution || '—' })">
+            <input class="input mono" v-model="f.screen" :placeholder="fp.resolution || '1920x1080'" autocomplete="off" spellcheck="false">
+          </cm-field>
+          <cm-field :label="t('profileform.window')" :hint="t('profileform.windowHint')">
+            <input class="input mono" v-model="f.window" placeholder="1280x800" autocomplete="off" spellcheck="false">
+          </cm-field>
+        </fieldset>
+
+        <fieldset class="m-0 p-0 border-0 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+          <legend class="col-span-full text-[11px] uppercase tracking-wide text-faint font-semibold mb-1 p-0">{{ t('profileform.section.region') }}</legend>
+          <cm-field :label="t('profileform.locale')" :hint="t('profileform.localeHint')">
+            <input class="input mono" v-model="f.locale" list="pf-locales" :placeholder="localePlaceholder" autocomplete="off" spellcheck="false">
+          </cm-field>
+          <cm-field :label="t('profileform.timezone')" :hint="t('profileform.timezoneHint')">
+            <input class="input mono" v-model="f.timezone" list="pf-timezones" :placeholder="tzPlaceholder" autocomplete="off" spellcheck="false">
+          </cm-field>
+          <datalist id="pf-locales"><option v-for="l in COMMON_LOCALES" :key="l" :value="l"></option></datalist>
+          <datalist id="pf-timezones"><option v-for="z in tzList" :key="z" :value="z"></option></datalist>
+        </fieldset>
+
+        <fieldset class="m-0 p-0 border-0 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+          <legend class="col-span-full text-[11px] uppercase tracking-wide text-faint font-semibold mb-1 p-0">{{ t('profileform.section.network') }}</legend>
+          <cm-field class="col-span-full" :label="t('profileform.webrtc')">
+            <select class="input" v-model="f.webrtc"><option v-for="m in WEBRTC" :key="m" :value="m">{{ t('profileform.webrtc.' + m) }}</option></select>
+          </cm-field>
+        </fieldset>
+
+        <fieldset class="m-0 p-0 border-0 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+          <legend class="col-span-full text-[11px] uppercase tracking-wide text-faint font-semibold mb-1 p-0">{{ t('profileform.section.fingerprint') }}</legend>
+          <cm-field class="col-span-full" :label="t('profileform.canvas')" :hint="t('profileform.canvasHint')">
+            <select class="input" v-model="f.canvas">
+              <option value="stable">{{ t('profileform.canvas.stable') }}</option>
+              <option value="random">{{ t('profileform.canvas.random') }}</option>
+            </select>
+          </cm-field>
+          <cm-field class="col-span-full" :label="t('profileform.fonts')" :hint="t('profileform.fontsHint', { n: fp.fonts ?? 0 })">
+            <textarea class="input mono" rows="3" v-model="f.fonts" spellcheck="false"></textarea>
+          </cm-field>
+          <div class="col-span-full"><cm-switch v-model="f.humanize" :label="t('profileform.humanize')"/></div>
+        </fieldset>
+
+        <fieldset class="m-0 p-0 border-0 flex flex-col gap-2">
+          <legend class="text-[11px] uppercase tracking-wide text-faint font-semibold mb-1 p-0">{{ t('profileform.section.machine') }}</legend>
+          <p class="m-0 text-[12px] text-faint">{{ t('profileform.machineHint') }}</p>
+          <dl class="m-0 grid grid-cols-[110px_1fr] gap-x-3 gap-y-1 text-[12.5px] rounded-lg bg-panel2 p-3">
+            <template v-for="r in machineRows" :key="r[0]"><dt class="text-muted">{{ t(r[0]) }}</dt><dd class="m-0 break-all select-text">{{ r[1] }}</dd></template>
+          </dl>
+          <div><button type="button" class="btn" :disabled="running" :title="running ? t('profileform.regenerateStopFirst') : ''" @click="openRegen">{{ t('profileform.regenerate') }}</button></div>
+        </fieldset>
+        <div v-if="error" class="text-bad text-[12.5px]">{{ error }}</div>
+      </form>
+      <template #footer>
+        <button type="button" class="btn" :disabled="busy" @click="$emit('close')">{{ t('common.cancel') }}</button>
+        <button type="submit" form="profile-form" class="btn btn-start" :disabled="busy || !f.name.trim()">
+          <template v-if="busy"><span class="spin"></span> {{ t('profileform.saving') }}</template><template v-else>{{ t('common.save') }}</template>
+        </button>
+      </template>
+    </cm-dialog>
+
+    <!-- OS differs from the pinned machine: keep it or pin a new one -->
+    <cm-dialog :open="open && osPrompt" :title="t('profileform.osTitle')" @close="osPrompt = false">
+      <p class="m-0 text-[13px] text-muted">{{ t('profileform.osBody', { from: osFrom, to: osTo }) }}</p>
+      <button type="button" class="btn !h-auto !items-start !justify-start text-left flex-col gap-0.5 py-2" @click="save('keep')">
+        <b>{{ t('profileform.osKeep', { from: osFrom }) }}</b><span class="text-faint text-[12px] font-normal">{{ t('profileform.osKeepHint', { from: osFrom }) }}</span>
+      </button>
+      <button type="button" class="btn !h-auto !items-start !justify-start text-left flex-col gap-0.5 py-2" @click="save('regenerate')">
+        <b>{{ t('profileform.osNew', { to: osTo }) }}</b><span class="text-faint text-[12px] font-normal">{{ t('profileform.osNewHint', { to: osTo }) }}</span>
+      </button>
+      <template #footer><button type="button" class="btn" @click="osPrompt = false">{{ t('common.cancel') }}</button></template>
+    </cm-dialog>
+
+    <!-- Explicit regenerate -->
+    <cm-dialog :open="open && regen.open" :title="t('profileform.regenTitle')" :busy="regen.busy" @close="regen.open = false">
+      <p class="m-0 text-[13px] text-muted">{{ t('profileform.regenBody') }}</p>
+      <cm-field :label="t('profileform.regenOs')">
+        <select class="input" v-model="regen.os"><option v-for="x in OSES" :key="x.k" :value="x.k">{{ x.t }}</option></select>
+      </cm-field>
+      <template #footer>
+        <button type="button" class="btn" :disabled="regen.busy" @click="regen.open = false">{{ t('common.cancel') }}</button>
+        <button type="button" class="btn btn-stop" :disabled="regen.busy" @click="regenerate">
+          <template v-if="regen.busy"><span class="spin"></span></template><template v-else>{{ t('profileform.regenConfirm') }}</template>
+        </button>
+      </template>
+    </cm-dialog>
+  </div>`,
+};
+} // end file-local scope
