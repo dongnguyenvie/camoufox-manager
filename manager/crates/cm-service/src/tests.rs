@@ -147,3 +147,70 @@ async fn language_setting() {
     assert_eq!(m.settings().await.language, "vi");
     assert!(m.update_settings(SettingsPatch { language: Some("ru".into()) }).await.is_err());
 }
+
+#[tokio::test]
+async fn proxy_import_is_all_or_nothing_and_skips_duplicates() {
+    let (m, _) = manager(true, free_port().await);
+    let r = m.import_proxies("a.example:1\nbroken line\nb.example:2").await.unwrap();
+    assert_eq!(r.rejected.len(), 1);
+    assert!(m.proxies().await.unwrap().is_empty(), "nothing saved");
+
+    let r = m.import_proxies("a.example:1\nsocks5://u:p@b.example:2\nA.example:1").await.unwrap();
+    assert_eq!((r.created.len(), r.skipped.clone()), (2, vec![3]));
+    let r = m.import_proxies("a.example:1").await.unwrap();
+    assert_eq!((r.created.len(), r.skipped.len()), (0, 1));
+    let json = serde_json::to_string(&m.proxies().await.unwrap()).unwrap();
+    assert!(!json.contains("\"p\"") && json.contains("\"hasPassword\":true"));
+}
+
+#[tokio::test]
+async fn proxy_update_keeps_or_clears_password() {
+    let (m, _) = manager(true, free_port().await);
+    let v = m
+        .create_proxy(NewProxy {
+            host: "h.example".into(),
+            port: 80,
+            username: Some("u".into()),
+            password: Some("pw".into()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(v.name, "h.example:80");
+    let edit = || NewProxy { name: "x".into(), host: "h.example".into(), port: 81, username: Some("u".into()), ..Default::default() };
+    assert!(m.update_proxy(v.id, edit(), false).await.unwrap().has_password);
+    assert!(!m.update_proxy(v.id, edit(), true).await.unwrap().has_password);
+    assert!(m.create_proxy(NewProxy { host: "bad host".into(), port: 1, ..Default::default() }).await.is_err());
+    m.delete_proxy(v.id).await.unwrap();
+    assert!(m.delete_proxy(v.id).await.is_err());
+}
+
+#[tokio::test]
+async fn bulk_and_sequential_assignment() {
+    let (m, _) = manager(true, free_port().await);
+    let mut ids = vec![];
+    for n in ["a", "b", "c"] {
+        ids.push(m.create_profile(NewProfile { name: n.into(), os: "win".into() }).await.unwrap().id);
+    }
+    m.import_proxies("p1.example:1\np2.example:1\np3.example:1\np4.example:1").await.unwrap();
+
+    let r = m.assign_many(Some(1), &[ids[0].clone(), "zz".into()]).await.unwrap();
+    assert_eq!((r[0].ok, r[1].reason), (true, Some("not-found")));
+
+    // profile c already uses proxy 2; it is outside the selection, so 2 is skipped for the others.
+    m.assign(&ids[2], Some(2)).await.unwrap();
+    let req = |dry| crate::proxies::SequenceRequest { profile_ids: ids[..2].to_vec(), proxy_ids: None, dry_run: dry };
+    let dry = m.assign_sequence(req(true)).await.unwrap();
+    assert_eq!(dry.pairs.iter().map(|p| p.proxy_id).collect::<Vec<_>>(), vec![Some(1), Some(3)]);
+    assert_eq!(dry.skipped_proxies.len(), 1);
+    assert!(dry.pairs.iter().all(|p| !p.applied));
+    let done = m.assign_sequence(req(false)).await.unwrap();
+    assert!(done.pairs.iter().all(|p| p.applied));
+    let ov = m.overview().await;
+    assert_eq!(ov.profiles[1].assigned.as_ref().unwrap().id, 3);
+
+    // not enough proxies
+    let many = crate::proxies::SequenceRequest { profile_ids: ids.clone(), proxy_ids: Some(vec![4]), dry_run: true };
+    let r = m.assign_sequence(many).await.unwrap();
+    assert_eq!(r.pairs[1].reason, Some("no-proxy"));
+}
