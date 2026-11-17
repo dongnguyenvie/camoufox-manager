@@ -180,8 +180,10 @@ const storageCol = key => ({ h: key, raw: true, k: 'yn', get: p => p.fp?.storage
 const ALL = [
   { h: 'profiles.col.name', w: 170, k: 'name', v: p => p.name },
   { g: 'profiles.group.profile', h: 'profiles.col.status', w: 112, k: 'status', v: p => t(p.running ? 'profiles.status.running' : 'profiles.status.stopped') },
+  { h: 'org.col.tags', w: 170, k: 'tags', v: p => CM.orgText.tags(p) },
+  { h: 'org.col.group', w: 120, k: 'group', v: p => CM.orgText.group(p) },
   { h: 'profiles.col.id', w: 210, cls: 'mono', v: p => p.id },
-  { h: 'profiles.col.activity', w: 112, v: p => p.running ? t('profiles.activity.running', { ago: fmt.ago(p.running.startedAt) }) : fmt.ago(p.lastActivity) },
+  { h: 'profiles.col.activity', w: 112, s: p => p.running ? Date.now() : Date.parse(p.lastActivity) || 0, v: p => p.running ? t('profiles.activity.running', { ago: fmt.ago(p.running.startedAt) }) : fmt.ago(p.lastActivity) },
   { h: 'profiles.col.os', w: 80, v: p => osName(p.os) },
   { g: 'profiles.group.proxy', h: 'profiles.col.proxy', w: 250, k: 'proxy', v: p => p.assigned ? proxyLabel(p.assigned) : t('proxies.none') },
   { h: 'profiles.col.type', w: 84, k: 'type', v: p => t(p.assigned ? 'profiles.own' : 'profiles.no') },
@@ -206,7 +208,7 @@ const ALL = [
   { h: 'User-Agent', raw: true, w: 260, cls: 'mono', v: p => p.fp?.userAgent || '—' },
   { g: 'profiles.group.data', h: 'profiles.col.path', w: 300, cls: 'mono', v: p => p.path.dir },
   { h: '', w: 34, k: 'reveal', v: () => '' },
-  { h: 'profiles.col.size', w: 92, cls: 'num', v: p => p.path.exists ? fmt.size(p.path.sizeBytes) : t('profiles.notYet') },
+  { h: 'profiles.col.size', w: 92, cls: 'num', s: p => p.path.sizeBytes, v: p => p.path.exists ? fmt.size(p.path.sizeBytes) : t('profiles.notYet') },
   { w: 66, ...storageCol('session') },
   { w: 56, ...storageCol('local') },
   { w: 64, ...storageCol('history') },
@@ -233,6 +235,9 @@ CM.pages.profiles = {
     const q = ref(''), filter = ref('all'), refreshing = ref(false), sheet = ref(null);
     // selection: a = anchor cell, f = focus cell, each {id, c}; by id so it survives data refreshes
     const sel = reactive({ a: null, f: null, drag: false });
+    // organization (components/org.js): tags/group/OS filters, sort, checkbox selection, saved views, bulk actions
+    const manage = ref(false);
+    const orgx = CM.useOrg({ q, filter, rows: () => view.value, profiles: () => o.value?.profiles });
 
     /* ---------- data ---------- */
     let px;
@@ -240,7 +245,7 @@ CM.pages.profiles = {
       // A proxy dropdown is open: do not re-render under it (it would close).
       if (!forceRefresh && document.activeElement?.tagName === 'SELECT') return;
       try {
-        const [ov] = await Promise.all([api('/api/overview'), px.fetchProxies()]);
+        const [ov] = await Promise.all([api('/api/overview'), px.fetchProxies(), orgx.loadOrg()]);
         o.value = ov;
         if (forceRefresh) ov.apiError ? toast(t('profiles.engineErrorToast'), true) : toast(t('common.updated'));
       } catch (e) { toast(t('common.loadFailed', { msg: e.message }), true); }
@@ -256,7 +261,7 @@ CM.pages.profiles = {
     const view = computed(() => {
       if (!o.value) return [];
       const needle = q.value.toLowerCase();
-      return o.value.profiles.filter(p => {
+      return orgx.sortRows(orgx.filterRows(o.value.profiles), ALL).filter(p => {
         if (filter.value === 'running' && !p.running) return false;
         if (filter.value === 'own' && !p.assigned) return false;
         if (filter.value === 'none' && p.assigned) return false;
@@ -398,7 +403,7 @@ CM.pages.profiles = {
 
     return {
       ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, dlg, del, edit, editing, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
-      runCount, view, raw, cellState, selectRow, down, over, dbl, onKey, copyAll, refresh, act, reveal, fmt,
+      runCount, view, raw, orgx, manage, load, cellState, selectRow, down, over, dbl, onKey, copyAll, refresh, act, reveal, fmt,
     };
   },
   template: `<cm-page :title="t('nav.profiles')" :count="o ? o.profiles.length : null">
@@ -431,6 +436,10 @@ CM.pages.profiles = {
       <cm-icon name="alert"/><div><b>{{ t('profiles.engineError') }}</b><br><span class="opacity-85">{{ o.apiError }}</span></div>
     </div>
 
+    <cm-org-bar :orgx="orgx" @manage="manage = true"/>
+    <cm-org-bulk v-if="orgx.checkedIds.value.length" :orgx="orgx" :profiles="o ? o.profiles : []" :proxies="proxies" :provider-available="!!o?.providerAvailable" @done="load()"/>
+    <cm-org-manage :open="manage" :orgx="orgx" @close="manage = false" @changed="load()"/>
+
     <div class="hidden min-[1100px]:block text-[11.5px] text-faint mb-2">
       <span v-html="t('profiles.hint', { shift: '<kbd>⇧</kbd>', cmdc: '<kbd>⌘C</kbd>' })"></span>
     </div>
@@ -448,8 +457,8 @@ CM.pages.profiles = {
             <th class="sr"></th>
           </tr>
           <tr class="h">
-            <th class="s0 !text-right">#</th>
-            <th v-for="(c, i) in ALL" :class="i === 0 ? 's1' : c.g ? 'gs' : ''" :title="head(c)">{{ head(c) }}</th>
+            <th class="s0 !px-1 !text-left"><input type="checkbox" class="align-middle m-0 mr-1" :checked="orgx.allChecked.value" :indeterminate.prop="orgx.someChecked.value && !orgx.allChecked.value" @change="orgx.toggleAll()" :title="t('org.selectAll')">#</th>
+            <th v-for="(c, i) in ALL" :class="[i === 0 ? 's1' : c.g ? 'gs' : '', c.h && c.k !== 'check' && c.k !== 'reveal' ? 'cursor-pointer select-none' : '']" :title="c.h && c.k !== 'check' && c.k !== 'reveal' ? head(c) + ' · ' + t('org.sort') : head(c)" @click="orgx.setSort(c)">{{ head(c) }}{{ orgx.sortMark(c) }}</th>
             <th class="sr"></th>
           </tr>
         </thead>
@@ -457,7 +466,9 @@ CM.pages.profiles = {
           <tr v-if="!o"><td :colspan="ALL.length + 2" class="!p-12 text-center text-muted"><div class="skel w-[30%]"></div></td></tr>
           <tr v-else-if="!view.length"><td :colspan="ALL.length + 2" class="!p-12 text-center text-muted">{{ t('profiles.noMatch') }}</td></tr>
           <tr v-for="(p, r) in view" :key="p.id" :class="{ live: p.running }">
-            <td class="s0 rn" :title="t('profiles.selectRow')" @mousedown.prevent="selectRow(r)">{{ r + 1 }}</td>
+            <td class="s0 rn !px-1 !text-left" :title="t('profiles.selectRow')" @mousedown.prevent="selectRow(r)">
+              <input type="checkbox" class="align-middle m-0 mr-1" :checked="!!orgx.checked[p.id]" :title="t('org.selectRow')" @mousedown.stop @click.stop="orgx.toggle(p.id, $event)">{{ r + 1 }}
+            </td>
 
             <td v-for="(c, i) in ALL" :key="i"
                 :class="[i === 0 ? 's1 c-name' : c.g ? 'gs' : '', c.cls, cellState(r, i)]"
@@ -465,6 +476,10 @@ CM.pages.profiles = {
                 @mousedown="down($event, r, i)" @mouseover="over(r, i)" @dblclick="dbl($event)">
 
               <span v-if="c.k === 'name'" class="font-bold">{{ p.name }}</span>
+
+ <cm-org-tags v-else-if="c.k === 'tags'" :id="p.id"/>
+
+              <span v-else-if="c.k === 'group'" :class="orgx.groupOf(p.id) ? '' : 'text-faint'">{{ raw(c, p) }}</span>
 
               <span v-else-if="c.k === 'status'" class="inline-flex items-center gap-1.5" :class="p.running ? '' : 'text-faint'">
                 <span class="dot" :class="p.running ? 'bg-ok animate-pulse-ring' : ''"></span>{{ raw(c, p) }}

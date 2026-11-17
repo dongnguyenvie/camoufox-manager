@@ -15,7 +15,7 @@ use std::{
 };
 
 #[derive(Default)]
-struct FakeEngine {
+pub(crate) struct FakeEngine {
     launched: Mutex<Vec<LaunchOptions>>,
 }
 
@@ -68,7 +68,7 @@ impl ProxyChecker for FakeChecker {
     }
 }
 
-fn manager(ok: bool, base_port: u16) -> (Manager, Arc<FakeEngine>) {
+pub(crate) fn manager(ok: bool, base_port: u16) -> (Manager, Arc<FakeEngine>) {
     let db = Db::memory().unwrap();
     let engine = Arc::new(FakeEngine::default());
     let deps = Deps {

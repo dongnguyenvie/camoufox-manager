@@ -12,3 +12,5 @@ a.md
 proxies.txt
 *.proxies.txt
 
+# worktree của subagent
+.claude/
