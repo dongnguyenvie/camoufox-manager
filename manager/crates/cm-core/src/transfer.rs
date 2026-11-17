@@ -30,4 +30,7 @@ pub struct BulkCreateRequest {
     pub pattern: String,
     pub count: u32,
     pub os: Os,
+    /// First number (default 1).
+    #[serde(default)]
+    pub start: Option<u32>,
 }

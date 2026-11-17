@@ -31,6 +31,7 @@ pub mod proxy;
 pub mod schedule;
 pub mod settings;
 pub mod sheets;
+pub mod snapshot;
 pub mod template;
 pub mod transfer;
 

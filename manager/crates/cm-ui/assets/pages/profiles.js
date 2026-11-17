@@ -388,6 +388,8 @@ CM.pages.profiles = {
       del.busy = false; busy[p.id] = false; load();
     }
 
+    const xfer = reactive({ exp: null, clone: null }); // components/transfer.js dialogs
+
     let timer;
     onMounted(() => {
       load();
@@ -402,7 +404,7 @@ CM.pages.profiles = {
     });
 
     return {
-      ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, dlg, del, edit, editing, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
+      xfer, ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, dlg, del, edit, editing, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
       runCount, view, raw, orgx, manage, load, cellState, selectRow, down, over, dbl, onKey, copyAll, refresh, act, reveal, fmt,
     };
   },
@@ -423,6 +425,7 @@ CM.pages.profiles = {
       <button class="btn" :disabled="refreshing" @click="refresh" :title="t('profiles.refreshTitle')">
         <span v-if="refreshing" class="spin"></span><cm-icon v-else name="refresh" :size="14"/> {{ t('common.refresh') }}
       </button>
+      <cm-transfer :export-profile="xfer.exp" :clone-profile="xfer.clone" @close-export="xfer.exp = null" @close-clone="xfer.clone = null" @changed="load()"/>
       <button v-if="o" class="btn btn-start" :disabled="!o.providerAvailable" :title="o.providerAvailable ? t('profiles.newTitle') : hint" @click="openCreate">
         <cm-icon name="plus" :size="14"/> {{ t('profiles.new') }}
       </button>
@@ -448,7 +451,7 @@ CM.pages.profiles = {
     <div ref="sheet" tabindex="0" @keydown="onKey" class="min-h-0 overflow-auto bg-panel border border-line rounded-xl shadow-card outline-none">
       <table class="grid-tbl">
         <colgroup>
-          <col style="width:44px"><col v-for="c in ALL" :style="{ width: c.w + 'px' }"><col style="width:172px">
+          <col style="width:44px"><col v-for="c in ALL" :style="{ width: c.w + 'px' }"><col style="width:232px">
         </colgroup>
         <thead>
           <tr class="g">
@@ -524,6 +527,8 @@ CM.pages.profiles = {
                 <span v-if="busy[p.id]" class="spin"></span><template v-else>▶ {{ t('profiles.start') }}</template>
               </button>
               <button class="icon-btn ml-1" :disabled="!!busy[p.id]" :title="t('profiles.edit')" @click="edit.id = p.id">✎</button>
+              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('transfer.export')" @click="xfer.exp = p">⤓</button>
+              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('transfer.clone')" @click="xfer.clone = p">⧉</button>
               <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('profiles.delete')" @click="del.p = p">🗑</button>
             </td>
           </tr>
