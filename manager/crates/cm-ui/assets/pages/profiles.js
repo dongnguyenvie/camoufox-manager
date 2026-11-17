@@ -365,6 +365,8 @@ CM.pages.profiles = {
     const del = reactive({ p: null, busy: false });
     const edit = reactive({ id: null });
     const editing = computed(() => (edit.id && o.value?.profiles.find(p => p.id === edit.id)) || null);
+    const cookies = reactive({ id: null }); // cookies dialog (components/cookies.js)
+    const cookiesFor = computed(() => (cookies.id && o.value?.profiles.find(p => p.id === cookies.id)) || null);
     const nameInput = ref(null);
     const openCreate = () => { dlg.open = true; dlg.name = ''; dlg.os = 'win'; nextTick(() => nameInput.value?.focus()); };
     async function create() {
@@ -404,7 +406,7 @@ CM.pages.profiles = {
     });
 
     return {
-      xfer, ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, dlg, del, edit, editing, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
+      xfer, ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, dlg, del, edit, editing, cookies, cookiesFor, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
       runCount, view, raw, orgx, manage, load, cellState, selectRow, down, over, dbl, onKey, copyAll, refresh, act, reveal, fmt,
     };
   },
@@ -529,6 +531,7 @@ CM.pages.profiles = {
               <button class="icon-btn ml-1" :disabled="!!busy[p.id]" :title="t('profiles.edit')" @click="edit.id = p.id">✎</button>
               <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('transfer.export')" @click="xfer.exp = p">⤓</button>
               <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('transfer.clone')" @click="xfer.clone = p">⧉</button>
+              <button class="icon-btn" :disabled="!!busy[p.id] || !!p.running" :title="p.running ? t('cookies.running') : t('cookies.title', { name: p.name })" @click="cookies.id = p.id">🍪</button>
               <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('profiles.delete')" @click="del.p = p">🗑</button>
             </td>
           </tr>
@@ -556,6 +559,7 @@ CM.pages.profiles = {
 
     <!-- ===== edit (components/profile-form.js) ===== -->
     <cm-profile-form :open="!!editing" :profile="editing" @close="edit.id = null" @saved="load()"/>
+    <cm-cookies :profile="cookiesFor" @close="cookies.id = null"/>
 
     <!-- ===== delete ===== -->
     <cm-dialog :open="!!del.p" :title="del.p ? t('profiles.deleteTitle', { name: del.p.name }) : ''" :busy="del.busy" @close="del.p = null">

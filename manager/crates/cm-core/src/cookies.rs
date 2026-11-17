@@ -26,4 +26,17 @@ pub struct Cookie {
     pub secure: bool,
     /// `Strict` | `Lax` | `None`
     pub same_site: Option<String>,
+    /// No `Domain` attribute: the cookie is for exactly `domain` (no leading dot, no subdomains).
+    pub host_only: bool,
+}
+
+/// What an import does with the cookies already in the profile.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CookieImportMode {
+    /// Replace only the cookies of the domains present in the import; other sessions stay.
+    #[default]
+    Domains,
+    /// Clear every cookie of the profile first.
+    All,
 }

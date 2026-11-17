@@ -15,7 +15,8 @@ the camoufox venv's python:  python <data_dir>/camoufox/helper <command> ...
          [--humanize] [--start-url URL] [--canvas stable|random]   (launch.py)
       Opens Camoufox with the persistent profile, prints {"ws": "ws://127.0.0.1:PORT/TOKEN"}
       (Playwright protocol: playwright.firefox.connect(ws)) and runs until stdin closes / "stop".
-  cookies ...                                                 (cookies.py, phase 5)
+  cookies export|import --user-data DIR --file FILE [--mode domains|all]   (cookies.py)
+      Cookie store of a CLOSED profile as JSON; prints {"ok": true, "count": N}.
   extensions ...                                              (extensions.py, phase 9)
 
 Every command prints JSON lines on stdout; an error is {"error": "..."} and exit code 1.
@@ -66,6 +67,7 @@ def main():
     c.add_argument("action", choices=["export", "import"])
     c.add_argument("--user-data", required=True)
     c.add_argument("--file", required=True)
+    c.add_argument("--mode", choices=["domains", "all"], default="domains")
     e = sub.add_parser("extensions")
     e.add_argument("action", choices=["install"])
     e.add_argument("--user-data", required=True)

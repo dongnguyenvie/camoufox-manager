@@ -6,7 +6,7 @@
 
 use crate::{
     Result,
-    cookies::{Cookie, CookieFormat},
+    cookies::{Cookie, CookieFormat, CookieImportMode},
     not_implemented,
     profile::{Os, Profile},
 };
@@ -139,8 +139,10 @@ pub trait Engine: Send + Sync {
         Err(not_implemented("cookies"))
     }
 
-    /// Write cookies into a closed profile (phase 5). Returns how many were imported.
-    async fn import_cookies(&self, _profile: &Profile, _cookies: &[Cookie]) -> Result<usize> {
+    /// Write cookies into a closed profile (phase 5). `mode` decides what happens to the
+    /// existing ones; with `Domains` the cookies of every host present in `cookies` are replaced.
+    /// Returns how many were written.
+    async fn import_cookies(&self, _profile: &Profile, _cookies: &[Cookie], _mode: CookieImportMode) -> Result<usize> {
         Err(not_implemented("cookies"))
     }
 }

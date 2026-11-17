@@ -18,7 +18,11 @@ mod process;
 
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
-use cm_core::{CmError, Engine, EngineHint, EngineStatus, LaunchOptions, MachineSummary, Os, Profile, Session, profile::valid_id};
+use cm_core::{
+    CmError, Engine, EngineHint, EngineStatus, LaunchOptions, MachineSummary, Os, Profile, Session,
+    cookies::{Cookie, CookieFormat, CookieImportMode},
+    profile::valid_id,
+};
 use serde_json::{Value, json};
 use std::{
     fs,
@@ -88,6 +92,51 @@ impl Camoufox {
         };
         *c = Some((Instant::now(), r.clone()));
         r
+    }
+
+    /// `helper cookies export|import` on the profile's user-data (python + stdlib sqlite only,
+    /// no browser start). Returns (exported cookies, count).
+    async fn cookie_helper(
+        &self,
+        p: &Profile,
+        action: &str,
+        cookies: Option<&[Cookie]>,
+        mode: CookieImportMode,
+    ) -> Result<(Vec<Cookie>, usize)> {
+        check_id(&p.id)?;
+        if self.procs.alive(&p.id).await == Some(true) {
+            bail!(CmError::Conflict("profile is running".into()));
+        }
+        if !self.python.is_file() {
+            bail!("python not found at {} — run {SETUP_SCRIPT}", self.python.display());
+        }
+        let dir = self.dir(&p.id);
+        fs::create_dir_all(&dir)?;
+        let file = dir.join(format!("cookies-{action}.json.tmp"));
+        match cookies {
+            Some(c) => fs::write(&file, serde_json::to_vec(c)?)?,
+            None => {
+                let _ = fs::remove_file(&file);
+            }
+        }
+        let user_data = self.data_dir(&p.id);
+        let (ud, f) = (user_data.to_string_lossy(), file.to_string_lossy());
+        let mode = if mode == CookieImportMode::All { "all" } else { "domains" };
+        let r = helper::run(
+            &self.python,
+            &self.helper,
+            &["cookies", action, "--user-data", &ud, "--file", &f, "--mode", mode],
+            Duration::from_secs(60),
+        )
+        .await;
+        let exported = if action == "export" && r.is_ok() { fs::read(&file).ok() } else { None };
+        let _ = fs::remove_file(&file); // holds cookie values: never leave it behind
+        let count = r?["count"].as_u64().unwrap_or(0) as usize;
+        let list = match exported {
+            Some(b) => serde_json::from_slice(&b).context("helper cookies export wrote invalid JSON")?,
+            None => Vec::new(),
+        };
+        Ok((list, count))
     }
 
     async fn ensure_installed(&self) -> Result<()> {
@@ -168,6 +217,15 @@ impl Engine for Camoufox {
 
     fn data_dir(&self, id: &str) -> PathBuf {
         self.dir(id).join("user-data")
+    }
+
+    async fn export_cookies(&self, p: &Profile, _format: CookieFormat) -> Result<Vec<Cookie>> {
+        let out = self.cookie_helper(p, "export", None, CookieImportMode::Domains).await?;
+        Ok(out.0)
+    }
+
+    async fn import_cookies(&self, p: &Profile, cookies: &[Cookie], mode: CookieImportMode) -> Result<usize> {
+        Ok(self.cookie_helper(p, "import", Some(cookies), mode).await?.1)
     }
 
     async fn delete_data(&self, id: &str) -> Result<()> {
