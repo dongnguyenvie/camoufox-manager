@@ -53,9 +53,13 @@ pub enum WebRtcMode {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CanvasMode {
-    /// Native rendering of the host, identical on every launch (default; see phase 4 report).
+    /// This profile's own canvas / WebGL / audio fingerprint, the same on every launch (default,
+    /// CM-1.20). Existing profiles saved as `stable` get it without migration.
     #[default]
     Stable,
+    /// Native rendering of this machine, identical on every launch AND on every profile (the
+    /// CM-1.4 behaviour of `stable`; links accounts on one machine).
+    Native,
     /// Camoufox's own random noise, different on every launch.
     Random,
 }

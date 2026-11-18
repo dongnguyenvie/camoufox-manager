@@ -1,5 +1,7 @@
 """`generate --os win|mac|lin`: build the pinned machine once (phase 4 owns pinning details)."""
 
+import secrets
+
 from common import OS_NAMES, decode_chunks, emit
 
 
@@ -12,4 +14,7 @@ def cmd_generate(args):
     config = decode_chunks(opts["env"], "CAMOU_CONFIG_")
     # addons are paths inside this install; launch adds them back.
     config.pop("addons", None)
+    # CM-1.20: the profile's own canvas/WebGL/audio seed, pinned with the machine. The browser
+    # ignores it; launch feeds it to the readback script (not a Camoufox key, hence `cm:`).
+    config["cm:canvasSeed"] = secrets.randbits(32)
     emit({"config": config})

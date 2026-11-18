@@ -1,5 +1,5 @@
 //! Pinned machine = the Camoufox config generated once (`navigator.*`, `screen.*`, `webGl:*`,
-//! `fonts`, …). This module reads it for the UI. Phase 4 owns it (pinning details, canvas).
+//! `fonts`, …). This module reads it for the UI. Phase 4 owns it (pinning details); CM-1.20 owns the canvas modes.
 
 use cm_core::{
     LaunchOptions, WebRtcMode,
@@ -37,7 +37,16 @@ pub fn override_args(o: &LaunchOptions) -> Vec<String> {
     if !o.extra_fonts.is_empty() {
         flag("fonts", &serde_json::to_string(&o.extra_fonts).unwrap_or_else(|_| "[]".into()));
     }
-    flag("canvas", if o.canvas_stable { "stable" } else { "random" });
+    flag(
+        "canvas",
+        if o.canvas_native {
+            "native"
+        } else if o.canvas_stable {
+            "unique"
+        } else {
+            "random"
+        },
+    );
     if let Some(u) = &o.start_url {
         // `--start-url=…`: a value starting with `-` must not be read as an option.
         a.push(format!("--start-url={u}"));
@@ -105,7 +114,11 @@ mod tests {
         let a = override_args(&o);
         let has = |x: &str| a.iter().any(|v| v == x);
         assert!(has("--locale") && has("de-DE") && has("none") && has("1200x800") && has("--humanize"));
-        assert!(has("--start-url=https://example.com") && has("stable") && has("[\"Foo\"]"));
+        assert!(has("--start-url=https://example.com") && has("unique") && has("[\"Foo\"]"));
+        let native = override_args(&LaunchOptions { canvas_stable: true, canvas_native: true, ..Default::default() });
+        assert!(native.iter().any(|v| v == "native") && !native.iter().any(|v| v == "unique"));
+        let random = override_args(&LaunchOptions::default());
+        assert!(random.iter().any(|v| v == "random"));
         assert!(!has("--screen"));
     }
 

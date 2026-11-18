@@ -52,8 +52,10 @@ pub struct LaunchOptions {
     pub extra_fonts: Vec<String>,
     pub humanize: bool,
     pub start_url: Option<String>,
-    /// Keep canvas/WebGL readback identical across launches.
+    /// Keep canvas/WebGL readback identical across launches (own value per profile, CM-1.20).
     pub canvas_stable: bool,
+    /// Native host rendering, shared by every profile (CM-1.4 behaviour); wins over `canvas_stable`.
+    pub canvas_native: bool,
 }
 
 /// A running browser, remote-controllable at `ws_url` (protocol: [`Engine::ws_protocol`]).

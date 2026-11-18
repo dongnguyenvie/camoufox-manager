@@ -12,7 +12,7 @@ the camoufox venv's python:  python <data_dir>/camoufox/helper <command> ...
   launch --profile <launch.json> --user-data <dir> [--proxy URL]
          [--timezone TZ] [--geo=LAT,LON] [--ip IP] [--headless] [--locale L]
          [--webrtc replace|real|forward|none] [--screen WxH] [--window WxH] [--fonts JSON]
-         [--humanize] [--start-url URL] [--canvas stable|random]   (launch.py)
+         [--humanize] [--start-url URL] [--canvas unique|native|random]   (launch.py)
       Opens Camoufox with the persistent profile, prints {"ws": "ws://127.0.0.1:PORT/TOKEN"}
       (Playwright protocol: playwright.firefox.connect(ws)) and runs until stdin closes / "stop".
   cookies export|import --user-data DIR --file FILE [--mode domains|all]   (cookies.py)
@@ -62,7 +62,7 @@ def main():
     l.add_argument("--fonts", help="JSON array of extra fonts")
     l.add_argument("--humanize", action="store_true")
     l.add_argument("--start-url")
-    l.add_argument("--canvas", choices=["stable", "random"])
+    l.add_argument("--canvas", choices=["unique", "native", "random"])
     c = sub.add_parser("cookies")
     c.add_argument("action", choices=["export", "import"])
     c.add_argument("--user-data", required=True)

@@ -41,9 +41,10 @@ I18N.add({
     'profileform.fontsHint': 'One per line, added to the pinned font list ({n} fonts).',
     'profileform.humanize': 'Humanize cursor movement',
     'profileform.canvas': 'Canvas and WebGL',
-    'profileform.canvas.stable': 'Stable: same result on every launch',
+    'profileform.canvas.stable': 'Unique: own per-profile value, same on every launch (recommended)',
+    'profileform.canvas.native': 'Native: this Mac\'s real rendering, shared by all profiles here',
     'profileform.canvas.random': 'Random: new noise on every launch',
-    'profileform.canvasHint': 'Stable uses the native rendering of this Mac, so profiles on this Mac share the same canvas hash. Random differs per launch, which sites can notice.',
+    'profileform.canvasHint': 'Unique gives each profile its own canvas, WebGL and audio values that stay the same across launches. Native makes every profile on this Mac look identical. Random changes each launch, which sites can notice.',
     'profileform.machineHint': 'Frozen when the profile was created. Read-only.',
     'profileform.m.os': 'OS',
     'profileform.m.ua': 'User-Agent',
@@ -104,9 +105,10 @@ I18N.add({
     'profileform.fontsHint': 'Mỗi dòng một font, thêm vào danh sách font đã ghim ({n} font).',
     'profileform.humanize': 'Di chuyển chuột giống người',
     'profileform.canvas': 'Canvas và WebGL',
-    'profileform.canvas.stable': 'Ổn định: kết quả giống nhau mỗi lần mở',
+    'profileform.canvas.stable': 'Riêng: mỗi profile một giá trị, giữ nguyên mỗi lần mở (khuyên dùng)',
+    'profileform.canvas.native': 'Gốc: cách vẽ thật của máy Mac này, mọi profile ở đây giống nhau',
     'profileform.canvas.random': 'Ngẫu nhiên: nhiễu mới mỗi lần mở',
-    'profileform.canvasHint': 'Ổn định dùng cách vẽ gốc của máy Mac này, nên các profile trên máy này có cùng hash canvas. Ngẫu nhiên đổi mỗi lần mở, website có thể nhận ra.',
+    'profileform.canvasHint': 'Riêng cho mỗi profile giá trị canvas, WebGL và audio của riêng nó, giữ nguyên qua các lần mở. Gốc khiến mọi profile trên máy này trông giống hệt nhau. Ngẫu nhiên đổi mỗi lần mở, website có thể nhận ra.',
     'profileform.machineHint': 'Được cố định khi tạo profile. Chỉ xem.',
     'profileform.m.os': 'HĐH',
     'profileform.m.ua': 'User-Agent',
@@ -273,6 +275,7 @@ CM.components.CmProfileForm = {
           <cm-field class="col-span-full" :label="t('profileform.canvas')" :hint="t('profileform.canvasHint')">
             <select class="input" v-model="f.canvas">
               <option value="stable">{{ t('profileform.canvas.stable') }}</option>
+              <option value="native">{{ t('profileform.canvas.native') }}</option>
               <option value="random">{{ t('profileform.canvas.random') }}</option>
             </select>
           </cm-field>

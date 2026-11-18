@@ -12,7 +12,7 @@ import os
 import signal
 import sys
 
-from common import apply_screen, check_timezone, decode_chunks, emit, encode_chunks, parse_size
+from common import CANVAS_INIT_JS, apply_screen, canvas_seed, check_timezone, decode_chunks, emit, encode_chunks, parse_size
 
 
 async def cmd_launch(args):
@@ -22,6 +22,10 @@ async def cmd_launch(args):
     with open(args.profile, encoding="utf-8") as f:
         profile = json.load(f)
     config = dict(profile["config"])
+    # `cm:*` keys are the manager's own pins (not Camoufox config): read here, never sent to the browser.
+    seed = canvas_seed(config, profile.get("id", ""))
+    for k in [k for k in config if k.startswith("cm:")]:
+        del config[k]
 
     # ---- overrides from the profile settings, applied on top of the pinned machine ----
     # Hardware stays pinned; only what the user explicitly set changes, so the identity holds.
@@ -43,11 +47,15 @@ async def cmd_launch(args):
         kwargs["humanize"] = True
     if args.webrtc == "none":
         kwargs["block_webrtc"] = True
-    if args.canvas == "stable":
+    if args.canvas in ("native", "unique"):
         # Camoufox >= 0.5.9 covers canvas/WebGL readback with random data by default (a new value
         # on every read and launch; `canvas:seed` is gone upstream). canvas_noise=False keeps the
         # host's native rendering, identical on every launch (measured in the phase 4 report).
+        # "native" stops here (identical on every profile of this machine); "unique" adds the
+        # per-profile seeded readback below (CM-1.20).
         kwargs["canvas_noise"] = False
+    if args.canvas == "unique":
+        kwargs["main_world_eval"] = True  # lets the init script below run in the page's own world ("mw:")
 
     # Identical launch_options inputs every time -> the fingerprint (fonts, GPU, voices...) stays.
     # geoip=False so Camoufox does not look up the IP itself and override the app's geo/timezone.
@@ -106,6 +114,9 @@ async def cmd_launch(args):
 
     async with async_playwright() as p:
         ctx = await p.firefox.launch_persistent_context(args.user_data, **opts)
+        if args.canvas == "unique":
+            # Per-profile, launch-stable canvas/WebGL/audio readback (see common.CANVAS_INIT_JS).
+            await ctx.add_init_script("mw:" + CANVAS_INIT_JS.replace("__SEED__", str(seed)))
         ctx.on("close", lambda _: stop.set())  # user closed the last window -> Firefox exits
         page = ctx.pages[0] if ctx.pages else await ctx.new_page()
         if args.start_url:

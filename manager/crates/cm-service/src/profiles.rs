@@ -456,6 +456,7 @@ pub(crate) fn launch_options_for(p: &Profile, geo: Option<&ProxyCheck>, port: Op
         humanize: s.humanize.unwrap_or(false),
         start_url: s.start_url.clone(),
         canvas_stable: s.canvas == CanvasMode::Stable,
+        canvas_native: s.canvas == CanvasMode::Native,
         ..Default::default()
     };
     o.timezone = s.timezone.clone().or_else(|| geo.map(|g| g.timezone.clone()).filter(|t| !t.is_empty()));
@@ -481,7 +482,11 @@ impl Manager {
     /// Read-only machine summary plus what the settings decide at launch.
     fn fp_of(&self, p: &Profile) -> MachineSummary {
         let mut fp = self.d.engine.summarize(&p.machine);
-        let canvas = if p.settings.canvas == CanvasMode::Stable { "stable" } else { "random" };
+        let canvas = match p.settings.canvas {
+            CanvasMode::Stable => "stable",
+            CanvasMode::Native => "native",
+            CanvasMode::Random => "random",
+        };
         fp.noise.canvas = Some(canvas.into());
         fp.noise.webgl = Some(canvas.into());
         fp.noise.audio = Some("native".into());
