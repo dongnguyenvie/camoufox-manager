@@ -432,6 +432,7 @@ CM.pages.profiles = {
         <span v-if="refreshing" class="spin"></span><cm-icon v-else name="refresh" :size="14"/> {{ t('common.refresh') }}
       </button>
       <cm-transfer :export-profile="xfer.exp" :clone-profile="xfer.clone" @close-export="xfer.exp = null" @close-clone="xfer.clone = null" @changed="load()"/>
+      <cm-sheets @changed="load()"/>
       <button v-if="o" class="btn btn-start" :disabled="!o.providerAvailable" :title="o.providerAvailable ? t('profiles.newTitle') : hint" @click="openCreate">
         <cm-icon name="plus" :size="14"/> {{ t('profiles.new') }}
       </button>
