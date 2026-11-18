@@ -15,10 +15,12 @@
 //! | `schedules` | `/api/schedules…` | 10 |
 //! | `sheets` | `/api/sheets…` | 11 |
 //! | `settings` | `/api/settings` | 1, 12 |
+//! | `lease` | `/api/profiles/{id}/lease…` | 8 |
 //! | `auth` | API-key middleware (pass-through until phase 12) | 12 |
 
 mod auth;
 mod cookies;
+mod lease;
 mod org;
 mod profiles;
 mod proxies;
@@ -84,6 +86,7 @@ pub fn router(m: Shared) -> Router {
         .merge(templates::routes())
         .merge(schedules::routes())
         .merge(sheets::routes())
-        .merge(settings::routes());
+        .merge(settings::routes())
+        .merge(lease::routes());
     auth::apply(api, m.clone()).merge(ui::routes()).with_state(m)
 }

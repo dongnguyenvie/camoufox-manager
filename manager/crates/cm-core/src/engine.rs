@@ -64,6 +64,14 @@ pub struct Session {
     pub ws_url: String,
 }
 
+/// A browser that died without being asked to stop (shown as status `crashed`).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CrashInfo {
+    /// Unix seconds.
+    pub at: u64,
+    pub detail: String,
+}
+
 /// Read-only summary of a pinned machine for the UI.
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -127,6 +135,11 @@ pub trait Engine: Send + Sync {
 
     /// `Some(false)` = engine knows it is gone (window closed, crash); `None` = unknown.
     async fn alive(&self, _id: &str) -> Option<bool> {
+        None
+    }
+
+    /// The browser died on its own and has not been started again since (phase 8).
+    async fn crashed(&self, _id: &str) -> Option<CrashInfo> {
         None
     }
 

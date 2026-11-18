@@ -98,7 +98,7 @@ pub fn is_hex_sha256(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-const EXCLUDED_FILES: &[&str] = &["lock", ".parentlock", "parent.lock", "SingletonLock", "SingletonCookie", "SingletonSocket"];
+const EXCLUDED_FILES: &[&str] = &["lock", "app.lock", ".parentlock", "parent.lock", "SingletonLock", "SingletonCookie", "SingletonSocket"];
 const EXCLUDED_DIRS: &[&str] = &[
     "cache2",
     "startupCache",

@@ -10,16 +10,17 @@
 //!   says why (`manager/camoufox/setup.sh`).
 //!
 //! Modules: `helper` (embedded python), `machine` (pinned machine → summary, phase 4),
-//! `process` (spawn/stop/alive, phase 8).
+//! `process` (spawn/stop/alive, phase 8), `lock` (per-profile lock + orphan cleanup, phase 8).
 
 mod helper;
+mod lock;
 mod machine;
 mod process;
 
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use cm_core::{
-    CmError, Engine, EngineHint, EngineStatus, LaunchOptions, MachineSummary, Os, Profile, Session,
+    CmError, CrashInfo, Engine, EngineHint, EngineStatus, LaunchOptions, MachineSummary, Os, Profile, Session,
     cookies::{Cookie, CookieFormat, CookieImportMode},
     profile::valid_id,
 };
@@ -62,7 +63,14 @@ impl Camoufox {
     pub fn new(root: PathBuf, python: PathBuf, headless: bool) -> Self {
         let _ = fs::create_dir_all(root.join("profiles"));
         let helper = helper::install(&root);
-        Self { root, python, helper, headless, procs: Default::default(), check: Mutex::new(None) }
+        // Stop browsers/helpers a crashed run left behind (matched by our lock files and the
+        // profile directory in their command line — never by process name).
+        let procs = process::Procs::default();
+        for id in lock::recover_orphans(&root.join("profiles")) {
+            println!("Stopped leftovers of a previous run in profile {id}");
+            procs.mark_crashed(&id, "the app stopped unexpectedly while this profile was open; leftovers were cleaned up");
+        }
+        Self { root, python, helper, headless, procs, check: Mutex::new(None) }
     }
 
     fn dir(&self, id: &str) -> PathBuf {
@@ -203,7 +211,7 @@ impl Engine for Camoufox {
         if opts.headless.unwrap_or(self.headless) {
             cmd.arg("--headless");
         }
-        let ws = self.procs.spawn(&p.id, cmd, &dir.join("launch.log")).await?;
+        let ws = self.procs.spawn(&p.id, &dir, cmd, &dir.join("launch.log")).await?;
         Ok(Session { ws_url: ws })
     }
 
@@ -213,6 +221,10 @@ impl Engine for Camoufox {
 
     async fn alive(&self, id: &str) -> Option<bool> {
         self.procs.alive(id).await
+    }
+
+    async fn crashed(&self, id: &str) -> Option<CrashInfo> {
+        self.procs.crashed(id)
     }
 
     fn data_dir(&self, id: &str) -> PathBuf {

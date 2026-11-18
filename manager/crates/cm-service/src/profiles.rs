@@ -44,6 +44,10 @@ pub struct ProfileView {
     pub fp: MachineSummary,
     pub assigned: Option<ProxyView>,
     pub running: Option<RunningView>,
+    /// Agent lease (phase 8).
+    pub lease: Option<crate::lease::LeaseView>,
+    /// The browser died on its own (phase 8); cleared by the next start.
+    pub crashed: Option<cm_core::CrashInfo>,
     pub path: PathInfo,
 }
 
@@ -123,10 +127,19 @@ impl Manager {
             }
         };
         let by_id: HashMap<ProxyId, ProxyView> = proxies.iter().map(|p| (p.id, self.proxy_view(p))).collect();
+        let leases = self.leases_snapshot();
+        let mut crashes = HashMap::new();
+        for p in &profiles {
+            if let Some(c) = self.d.engine.crashed(&p.id).await {
+                crashes.insert(p.id.clone(), c);
+            }
+        }
         let running = self.running.lock().await;
         let views = profiles
             .into_iter()
             .map(|p| ProfileView {
+                lease: leases.get(&p.id).cloned(),
+                crashed: crashes.get(&p.id).cloned(),
                 assigned: p.proxy_id.and_then(|i| by_id.get(&i).cloned()),
                 running: running.get(&p.id).map(|r| RunningView { ws: r.ws.clone(), port: r.port, started_at: r.started_at }),
                 path: self.path_info(&p.id),
@@ -154,6 +167,13 @@ impl Manager {
     }
 
     pub async fn start(&self, id: &str) -> Result<StartResult> {
+        self.start_as(id, None).await
+    }
+
+    /// Start on behalf of `holder` (the agent holding the lease, if any); refused while someone
+    /// else (or an anonymous caller) asks for a leased profile.
+    pub async fn start_as(&self, id: &str, holder: Option<&str>) -> Result<StartResult> {
+        self.lease_check_start(id, holder)?;
         self.prune_dead().await;
         if let Some(r) = self.running.lock().await.get(id) {
             return Ok(StartResult { ws: r.ws.clone(), port: r.port, geo: None, already: true });
@@ -201,6 +221,7 @@ impl Manager {
     }
 
     pub async fn stop(&self, id: &str) -> Result<()> {
+        let _ = self.lease_release(id, None).await; // phase 8: stopping ends the lease
         self.d.engine.stop(id).await?;
         let proxy = self.running.lock().await.remove(id).and_then(|r| r.proxy);
         if let Some(px) = proxy {

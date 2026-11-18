@@ -54,6 +54,8 @@ I18N.add({
     'profiles.deleting': 'Deleting…',
     'profiles.deleted': 'Deleted {name}',
     'profiles.status.running': 'running',
+    'profiles.status.crashed': 'crashed',
+    'profiles.lease': 'leased by {holder}',
     'profiles.status.stopped': 'stopped',
     'profiles.activity.running': 'running {ago}',
     'profiles.byIp': 'by IP',
@@ -129,6 +131,8 @@ I18N.add({
     'profiles.deleting': 'Đang xoá…',
     'profiles.deleted': 'Đã xoá {name}',
     'profiles.status.running': 'đang chạy',
+    'profiles.status.crashed': 'bị lỗi',
+    'profiles.lease': 'agent {holder} đang giữ',
     'profiles.status.stopped': 'dừng',
     'profiles.activity.running': 'chạy {ago}',
     'profiles.byIp': 'theo IP',
@@ -179,7 +183,7 @@ const storageCol = key => ({ h: key, raw: true, k: 'yn', get: p => p.fp?.storage
 
 const ALL = [
   { h: 'profiles.col.name', w: 170, k: 'name', v: p => p.name },
-  { g: 'profiles.group.profile', h: 'profiles.col.status', w: 112, k: 'status', v: p => t(p.running ? 'profiles.status.running' : 'profiles.status.stopped') },
+  { g: 'profiles.group.profile', h: 'profiles.col.status', w: 112, k: 'status', v: p => (p.crashed && !p.running ? t('profiles.status.crashed') : t(p.running ? 'profiles.status.running' : 'profiles.status.stopped')) + (p.lease ? ' · ' + t('profiles.lease', { holder: p.lease.holder }) : '') },
   { h: 'org.col.tags', w: 170, k: 'tags', v: p => CM.orgText.tags(p) },
   { h: 'org.col.group', w: 120, k: 'group', v: p => CM.orgText.group(p) },
   { h: 'profiles.col.id', w: 210, cls: 'mono', v: p => p.id },
@@ -486,8 +490,8 @@ CM.pages.profiles = {
 
               <span v-else-if="c.k === 'group'" :class="orgx.groupOf(p.id) ? '' : 'text-faint'">{{ raw(c, p) }}</span>
 
-              <span v-else-if="c.k === 'status'" class="inline-flex items-center gap-1.5" :class="p.running ? '' : 'text-faint'">
-                <span class="dot" :class="p.running ? 'bg-ok animate-pulse-ring' : ''"></span>{{ raw(c, p) }}
+              <span v-else-if="c.k === 'status'" class="inline-flex items-center gap-1.5" :class="p.running ? '' : p.crashed ? 'text-bad' : 'text-faint'" :title="p.crashed && !p.running ? p.crashed.detail : ''">
+                <span class="dot" :class="p.running ? 'bg-ok animate-pulse-ring' : p.crashed ? 'bg-bad' : ''"></span>{{ raw(c, p) }}
               </span>
 
               <select v-else-if="c.k === 'proxy'" :value="p.assigned ? p.assigned.id : ''" :disabled="!!p.running || !!busy[p.id]"

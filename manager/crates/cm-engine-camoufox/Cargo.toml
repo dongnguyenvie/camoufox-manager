@@ -9,5 +9,7 @@ license.workspace = true
 cm-core.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+libc = "0.2"
 tokio.workspace = true

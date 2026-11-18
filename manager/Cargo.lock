@@ -336,6 +336,8 @@ dependencies = [
  "anyhow",
  "async-trait",
  "cm-core",
+ "libc",
+ "serde",
  "serde_json",
  "tokio",
 ]

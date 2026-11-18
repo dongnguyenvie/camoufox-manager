@@ -14,8 +14,10 @@
 //! | `scheduler` | scheduled launches | 10 |
 //! | `sheets` | xlsx/csv import/export | 11 |
 //! | `settings` | language, engine, API key | 1, 12 |
+//! | `lease` | agent lease on a profile | 8 |
 
 pub mod cookies;
+pub mod lease;
 pub mod org;
 pub mod profiles;
 pub mod proxies;
@@ -72,13 +74,15 @@ pub struct Manager {
     d: Deps,
     cfg: Config,
     running: Mutex<HashMap<String, Running>>,
+    /// Agent leases by profile id (phase 8).
+    leases: std::sync::Mutex<HashMap<String, lease::Lease>>,
     /// Active relays by proxy id.
     relays: Mutex<HashMap<ProxyId, (u16, JoinHandle<()>)>>,
 }
 
 impl Manager {
     pub fn new(deps: Deps, cfg: Config) -> Self {
-        Self { d: deps, cfg, running: Mutex::new(HashMap::new()), relays: Mutex::new(HashMap::new()) }
+        Self { d: deps, cfg, running: Mutex::new(HashMap::new()), leases: Default::default(), relays: Mutex::new(HashMap::new()) }
     }
 
     pub fn config(&self) -> &Config {

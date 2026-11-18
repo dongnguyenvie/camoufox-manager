@@ -5,6 +5,7 @@ use super::{ApiResult, Shared, ok};
 use axum::{
     Json, Router,
     extract::{Path, State},
+    http::HeaderMap,
     routing::{get, post},
 };
 use cm_core::NewProfile;
@@ -36,8 +37,10 @@ async fn overview(State(m): State<Shared>) -> ApiResult {
     ok(m.overview().await)
 }
 
-async fn start(State(m): State<Shared>, Path(id): Path<String>) -> ApiResult {
-    ok(m.start(&id).await?)
+async fn start(State(m): State<Shared>, Path(id): Path<String>, headers: HeaderMap) -> ApiResult {
+    // Phase 8: the lease holder identifies itself; anyone else gets 409 while the profile is leased.
+    let holder = headers.get("x-lease-holder").and_then(|v| v.to_str().ok());
+    ok(m.start_as(&id, holder).await?)
 }
 
 async fn stop(State(m): State<Shared>, Path(id): Path<String>) -> ApiResult {
