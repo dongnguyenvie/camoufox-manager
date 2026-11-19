@@ -76,13 +76,22 @@ pub struct Manager {
     running: Mutex<HashMap<String, Running>>,
     /// Agent leases by profile id (phase 8).
     leases: std::sync::Mutex<HashMap<String, lease::Lease>>,
+    /// Scheduler runtime state (phase 10).
+    sched: scheduler::SchedState,
     /// Active relays by proxy id.
     relays: Mutex<HashMap<ProxyId, (u16, JoinHandle<()>)>>,
 }
 
 impl Manager {
     pub fn new(deps: Deps, cfg: Config) -> Self {
-        Self { d: deps, cfg, running: Mutex::new(HashMap::new()), leases: Default::default(), relays: Mutex::new(HashMap::new()) }
+        Self {
+            d: deps,
+            cfg,
+            running: Mutex::new(HashMap::new()),
+            leases: Default::default(),
+            sched: Default::default(),
+            relays: Mutex::new(HashMap::new()),
+        }
     }
 
     pub fn config(&self) -> &Config {

@@ -163,4 +163,10 @@ pub trait Engine: Send + Sync {
     async fn import_cookies(&self, _profile: &Profile, _cookies: &[Cookie], _mode: CookieImportMode) -> Result<usize> {
         Err(not_implemented("cookies"))
     }
+
+    /// Browse like a person on a running profile (scheduler warming): open each of `urls`, stay
+    /// `dwell_secs` on it with light scrolling. Does not close the browser.
+    async fn browse(&self, _ws_url: &str, _urls: &[String], _dwell_secs: u32) -> Result<()> {
+        Err(not_implemented("browse"))
+    }
 }

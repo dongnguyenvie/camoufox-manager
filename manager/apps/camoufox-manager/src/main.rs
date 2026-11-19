@@ -93,6 +93,7 @@ pub fn build_manager() -> Result<Arc<Manager>> {
 /// Headless mode: `camoufox-manager serve` → http://127.0.0.1:$CM_PORT, Ctrl+C / SIGTERM to quit.
 async fn serve_headless() -> Result<()> {
     let app = build_manager()?;
+    app.clone().spawn_scheduler(); // phase 10: scheduled runs
     let port = env_port("CM_PORT")?.unwrap_or(DEFAULT_PORT);
     let listener =
         tokio::net::TcpListener::bind(("127.0.0.1", port)).await.with_context(|| format!("cannot listen on 127.0.0.1:{port}"))?;

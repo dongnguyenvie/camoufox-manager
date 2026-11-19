@@ -19,6 +19,8 @@ the camoufox venv's python:  python <data_dir>/camoufox/helper <command> ...
       Cookie store of a CLOSED profile as JSON; prints {"ok": true, "count": N}.
   extensions install --user-data DIR [XPI...]                 (extensions.py)
       Sync <DIR>/extensions/ with the given .xpi files; prints {"ok": true, "installed": [...], "removed": [...]}.
+  warm --ws WS --urls JSON --dwell SECONDS                    (warm.py, phase 10)
+      Visits each URL on a RUNNING profile (connects over its ws endpoint), dwelling with light scrolling.
 
 Every command prints JSON lines on stdout; an error is {"error": "..."} and exit code 1.
 """
@@ -74,6 +76,10 @@ def main():
     e.add_argument("action", choices=["install"])
     e.add_argument("--user-data", required=True)
     e.add_argument("xpi", nargs="*")
+    w = sub.add_parser("warm")
+    w.add_argument("--ws", required=True)
+    w.add_argument("--urls", required=True, help="JSON array of URLs")
+    w.add_argument("--dwell", type=float, required=True, help="seconds per URL")
     args = ap.parse_args()
     try:
         if args.cmd == "check":
@@ -90,6 +96,10 @@ def main():
             from cookies import cmd_cookies
 
             cmd_cookies(args)
+        elif args.cmd == "warm":
+            from warm import cmd_warm
+
+            asyncio.run(cmd_warm(args))
         else:
             from extensions import cmd_extensions
 

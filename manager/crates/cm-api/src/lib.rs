@@ -71,11 +71,6 @@ pub(crate) fn ok<T: serde::Serialize>(v: T) -> ApiResult {
     Ok(Json(serde_json::to_value(v)?))
 }
 
-/// Handler for areas whose phase has not landed: 501 `{ "error": "<area>: not implemented yet" }`.
-pub(crate) fn not_implemented(area: &'static str) -> ApiError {
-    ApiError(cm_core::not_implemented(area))
-}
-
 pub fn router(m: Shared) -> Router {
     let api = Router::new()
         .merge(profiles::routes())

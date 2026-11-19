@@ -54,8 +54,14 @@ impl Engine for FakeEngine {
     }
 }
 
-struct FakeChecker {
+pub(crate) struct FakeChecker {
     ok: bool,
+}
+
+impl FakeChecker {
+    pub(crate) fn new(ok: bool) -> Self {
+        Self { ok }
+    }
 }
 
 #[async_trait]

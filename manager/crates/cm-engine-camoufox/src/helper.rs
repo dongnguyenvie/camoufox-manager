@@ -19,6 +19,7 @@ const FILES: &[(&str, &str)] = &[
     ("launch.py", include_str!("../python/helper/launch.py")),
     ("cookies.py", include_str!("../python/helper/cookies.py")),
     ("extensions.py", include_str!("../python/helper/extensions.py")),
+    ("warm.py", include_str!("../python/helper/warm.py")),
 ];
 
 /// Write the helper into `<root>/helper/` (only files whose content changed) and return its path.

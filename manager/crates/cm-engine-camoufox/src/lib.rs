@@ -234,6 +234,17 @@ impl Engine for Camoufox {
         self.dir(id).join("user-data")
     }
 
+    async fn browse(&self, ws_url: &str, urls: &[String], dwell_secs: u32) -> Result<()> {
+        let urls_json = serde_json::to_string(urls)?;
+        let limit = Duration::from_secs(u64::from(dwell_secs) * urls.len() as u64 + 90);
+        let dwell = dwell_secs.to_string();
+        let v = helper::run(&self.python, &self.helper, &["warm", "--ws", ws_url, "--urls", &urls_json, "--dwell", &dwell], limit).await?;
+        if let Some(n) = v["failed"].as_array().filter(|a| !a.is_empty()) {
+            eprintln!("warm: {} URL(s) could not be opened: {}", n.len(), v["failed"]);
+        }
+        Ok(())
+    }
+
     async fn export_cookies(&self, p: &Profile, _format: CookieFormat) -> Result<Vec<Cookie>> {
         let out = self.cookie_helper(p, "export", None, CookieImportMode::Domains).await?;
         Ok(out.0)

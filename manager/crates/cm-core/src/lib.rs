@@ -41,7 +41,7 @@ pub use error::{CmError, not_implemented};
 pub use org::{Group, GroupRepo, SavedView, SavedViewRepo, Tag, TagRepo};
 pub use profile::{CanvasMode, NewProfile, Os, Profile, ProfileRepo, ProfileSettings, WebRtcMode};
 pub use proxy::{NewProxy, Proxy, ProxyCheck, ProxyChecker, ProxyId, ProxyRepo, ProxyScheme};
-pub use schedule::{Schedule, ScheduleAction, ScheduleKind, ScheduleRepo, ScheduleRun, ScheduleRunOutcome};
+pub use schedule::{Preconditions, Recurrence, Schedule, ScheduleAction, ScheduleRepo, ScheduleRun, ScheduleRunOutcome, ScheduleTarget};
 pub use settings::SettingsRepo;
 pub use template::{Extension, ExtensionRepo, Template, TemplateRepo};
 

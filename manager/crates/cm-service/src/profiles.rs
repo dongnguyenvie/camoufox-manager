@@ -103,7 +103,7 @@ impl Manager {
     }
 
     /// Forget browsers the engine reports as gone (user closed the window, crash).
-    async fn prune_dead(&self) {
+    pub(crate) async fn prune_dead(&self) {
         let ids: Vec<String> = self.running.lock().await.keys().cloned().collect();
         for id in ids {
             if self.d.engine.alive(&id).await == Some(false) {
