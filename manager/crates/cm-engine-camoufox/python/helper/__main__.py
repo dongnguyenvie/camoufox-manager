@@ -12,12 +12,13 @@ the camoufox venv's python:  python <data_dir>/camoufox/helper <command> ...
   launch --profile <launch.json> --user-data <dir> [--proxy URL]
          [--timezone TZ] [--geo=LAT,LON] [--ip IP] [--headless] [--locale L]
          [--webrtc replace|real|forward|none] [--screen WxH] [--window WxH] [--fonts JSON]
-         [--humanize] [--start-url URL] [--canvas unique|native|random]   (launch.py)
+         [--humanize] [--start-url URL] [--canvas unique|native|random] [--extension X.xpi]...   (launch.py)
       Opens Camoufox with the persistent profile, prints {"ws": "ws://127.0.0.1:PORT/TOKEN"}
       (Playwright protocol: playwright.firefox.connect(ws)) and runs until stdin closes / "stop".
   cookies export|import --user-data DIR --file FILE [--mode domains|all]   (cookies.py)
       Cookie store of a CLOSED profile as JSON; prints {"ok": true, "count": N}.
-  extensions ...                                              (extensions.py, phase 9)
+  extensions install --user-data DIR [XPI...]                 (extensions.py)
+      Sync <DIR>/extensions/ with the given .xpi files; prints {"ok": true, "installed": [...], "removed": [...]}.
 
 Every command prints JSON lines on stdout; an error is {"error": "..."} and exit code 1.
 """
@@ -63,6 +64,7 @@ def main():
     l.add_argument("--humanize", action="store_true")
     l.add_argument("--start-url")
     l.add_argument("--canvas", choices=["unique", "native", "random"])
+    l.add_argument("--extension", action="append", help="path of an .xpi to install (repeatable)")
     c = sub.add_parser("cookies")
     c.add_argument("action", choices=["export", "import"])
     c.add_argument("--user-data", required=True)

@@ -56,6 +56,9 @@ pub struct LaunchOptions {
     pub canvas_stable: bool,
     /// Native host rendering, shared by every profile (CM-1.4 behaviour); wins over `canvas_stable`.
     pub canvas_native: bool,
+    /// Firefox extensions (`.xpi` files) to install into the profile before the browser opens.
+    /// The engine also removes extensions it installed earlier that are no longer listed.
+    pub extensions: Vec<PathBuf>,
 }
 
 /// A running browser, remote-controllable at `ws_url` (protocol: [`Engine::ws_protocol`]).

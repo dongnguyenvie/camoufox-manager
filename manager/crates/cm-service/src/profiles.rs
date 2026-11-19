@@ -201,7 +201,8 @@ impl Manager {
             geo = Some(g);
         }
         // Proxy-derived geography is the default, the profile's overrides win (D4).
-        let opts = launch_options_for(&profile, geo.as_ref(), port);
+        let mut opts = launch_options_for(&profile, geo.as_ref(), port);
+        opts.extensions = self.extension_files(id).await; // CM-1.9: assigned Firefox extensions
         let session = match self.d.engine.launch(&profile, &opts).await {
             Ok(s) => s,
             Err(e) => {
@@ -515,7 +516,7 @@ impl Manager {
         fp
     }
 
-    fn pinned_screen(&self, p: &Profile) -> Option<(u32, u32)> {
+    pub(crate) fn pinned_screen(&self, p: &Profile) -> Option<(u32, u32)> {
         parse_size(self.d.engine.summarize(&p.machine).resolution.as_deref()?, "screen").ok()
     }
 

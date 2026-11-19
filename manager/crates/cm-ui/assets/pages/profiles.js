@@ -395,6 +395,7 @@ CM.pages.profiles = {
     }
 
     const xfer = reactive({ exp: null, clone: null }); // components/transfer.js dialogs
+    const tplx = reactive({ ext: null, save: null });  // pages/templates.js: profile extensions / save as template
 
     let timer;
     onMounted(() => {
@@ -410,7 +411,7 @@ CM.pages.profiles = {
     });
 
     return {
-      xfer, ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, dlg, del, edit, editing, cookies, cookiesFor, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
+      xfer, tplx, ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, dlg, del, edit, editing, cookies, cookiesFor, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
       runCount, view, raw, orgx, manage, load, cellState, selectRow, down, over, dbl, onKey, copyAll, refresh, act, reveal, fmt,
     };
   },
@@ -537,6 +538,8 @@ CM.pages.profiles = {
               <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('transfer.export')" @click="xfer.exp = p">⤓</button>
               <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('transfer.clone')" @click="xfer.clone = p">⧉</button>
               <button class="icon-btn" :disabled="!!busy[p.id] || !!p.running" :title="p.running ? t('cookies.running') : t('cookies.title', { name: p.name })" @click="cookies.id = p.id">🍪</button>
+              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('tpl.prof.extBtn')" @click="tplx.ext = p">🧩</button>
+              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('tpl.prof.starTitle')" @click="tplx.save = p">★</button>
               <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('profiles.delete')" @click="del.p = p">🗑</button>
             </td>
           </tr>
@@ -565,6 +568,7 @@ CM.pages.profiles = {
     <!-- ===== edit (components/profile-form.js) ===== -->
     <cm-profile-form :open="!!editing" :profile="editing" @close="edit.id = null" @saved="load()"/>
     <cm-cookies :profile="cookiesFor" @close="cookies.id = null"/>
+    <cm-tpl-dialogs :ext-profile="tplx.ext" :save-profile="tplx.save" @close-ext="tplx.ext = null" @close-save="tplx.save = null"/>
 
     <!-- ===== delete ===== -->
     <cm-dialog :open="!!del.p" :title="del.p ? t('profiles.deleteTitle', { name: del.p.name }) : ''" :busy="del.busy" @close="del.p = null">

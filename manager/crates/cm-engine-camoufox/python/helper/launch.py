@@ -12,6 +12,7 @@ import os
 import signal
 import sys
 
+from extensions import PREFS as EXTENSION_PREFS, sync as sync_extensions
 from common import CANVAS_INIT_JS, apply_screen, canvas_seed, check_timezone, decode_chunks, emit, encode_chunks, parse_size
 
 
@@ -57,6 +58,9 @@ async def cmd_launch(args):
     if args.canvas == "unique":
         kwargs["main_world_eval"] = True  # lets the init script below run in the page's own world ("mw:")
 
+    # Firefox extensions assigned in the app (sideloaded into <profile>/extensions, see extensions.py).
+    installed = sync_extensions(args.user_data, args.extension or [])
+
     # Identical launch_options inputs every time -> the fingerprint (fonts, GPU, voices...) stays.
     # geoip=False so Camoufox does not look up the IP itself and override the app's geo/timezone.
     opts = launch_options(config=config, headless=args.headless, geoip=False, i_know_what_im_doing=True, **kwargs)
@@ -65,6 +69,8 @@ async def cmd_launch(args):
     env = opts["env"]
     cfg = decode_chunks(env, "CAMOU_CONFIG_")
     prefs = opts.setdefault("firefox_user_prefs", {})
+    if installed:
+        prefs.update(EXTENSION_PREFS)  # sideloaded unsigned add-ons are ignored without these
     for k in [k for k in cfg if k.startswith("geolocation:") or k in ("timezone", "webrtc:ipv4")]:
         del cfg[k]
     if args.timezone:

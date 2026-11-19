@@ -208,6 +208,9 @@ impl Engine for Camoufox {
             cmd.arg("--ip").arg(ip);
         }
         machine::launch_args(opts, &mut cmd);
+        for xpi in &opts.extensions {
+            cmd.arg("--extension").arg(xpi);
+        }
         if opts.headless.unwrap_or(self.headless) {
             cmd.arg("--headless");
         }

@@ -16,7 +16,7 @@ use std::{
 
 #[derive(Default)]
 pub(crate) struct FakeEngine {
-    launched: Mutex<Vec<LaunchOptions>>,
+    pub(crate) launched: Mutex<Vec<LaunchOptions>>,
 }
 
 #[async_trait]
