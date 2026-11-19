@@ -88,7 +88,8 @@ pub(crate) fn manager(ok: bool, base_port: u16) -> (Manager, Arc<FakeEngine>) {
         templates: Arc::new(SqliteTemplates::new(db.clone())),
         extensions: Arc::new(SqliteExtensions::new(db.clone())),
         schedules: Arc::new(SqliteSchedules::new(db.clone())),
-        settings: Arc::new(SqliteSettings::new(db)),
+        settings: Arc::new(SqliteSettings::new(db.clone())),
+        api_keys: Arc::new(SqliteApiKeys::new(db)),
         clock: Arc::new(SystemClock),
     };
     (Manager::new(deps, Config { proxy_base_port: base_port, data_dir: PathBuf::from("/tmp"), db_path: None }), engine)
@@ -149,9 +150,9 @@ async fn create_validates_and_delete_works() {
 async fn language_setting() {
     let (m, _) = manager(true, free_port().await);
     assert_eq!(m.language().await, "en");
-    m.update_settings(SettingsPatch { language: Some("vi".into()) }).await.unwrap();
+    m.update_settings(SettingsPatch { language: Some("vi".into()), ..Default::default() }).await.unwrap();
     assert_eq!(m.settings().await.language, "vi");
-    assert!(m.update_settings(SettingsPatch { language: Some("ru".into()) }).await.is_err());
+    assert!(m.update_settings(SettingsPatch { language: Some("ru".into()), ..Default::default() }).await.is_err());
 }
 
 #[tokio::test]

@@ -16,11 +16,12 @@ mod helper;
 mod lock;
 mod machine;
 mod process;
+mod version;
 
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use cm_core::{
-    CmError, CrashInfo, Engine, EngineHint, EngineStatus, LaunchOptions, MachineSummary, Os, Profile, Session,
+    CmError, CrashInfo, Engine, EngineHint, EngineStatus, EngineVersions, LaunchOptions, MachineSummary, Os, Profile, Session,
     cookies::{Cookie, CookieFormat, CookieImportMode},
     profile::valid_id,
 };
@@ -42,6 +43,8 @@ pub struct Camoufox {
     procs: process::Procs,
     /// Last `helper check` result (python takes ~0.5s, so it is cached).
     check: Mutex<Option<(Instant, std::result::Result<(), EngineHint>)>>,
+    /// Package/browser versions (python probe, cached like `check`; phase 12).
+    versions: Mutex<Option<(Instant, Option<EngineVersions>)>>,
 }
 
 fn write_atomic(path: &Path, data: &[u8]) -> Result<()> {
@@ -70,7 +73,7 @@ impl Camoufox {
             println!("Stopped leftovers of a previous run in profile {id}");
             procs.mark_crashed(&id, "the app stopped unexpectedly while this profile was open; leftovers were cleaned up");
         }
-        Self { root, python, helper, headless, procs, check: Mutex::new(None) }
+        Self { root, python, helper, headless, procs, check: Mutex::new(None), versions: Mutex::new(None) }
     }
 
     fn dir(&self, id: &str) -> PathBuf {
@@ -164,7 +167,31 @@ impl Engine for Camoufox {
 
     async fn status(&self) -> EngineStatus {
         let r = self.installed().await;
-        EngineStatus { ready: r.is_ok(), hint: r.err(), version: None }
+        let version = self.versions().await.as_ref().and_then(version::summary);
+        EngineStatus { ready: r.is_ok(), hint: r.err(), version }
+    }
+
+    async fn versions(&self) -> Option<EngineVersions> {
+        if !self.python.is_file() {
+            return None;
+        }
+        let mut c = self.versions.lock().await;
+        if let Some((at, v)) = &*c
+            && at.elapsed() < Duration::from_secs(if v.is_some() { 300 } else { 15 })
+        {
+            return v.clone();
+        }
+        let v = version::detect(&self.python).await;
+        *c = Some((Instant::now(), v.clone()));
+        v
+    }
+
+    async fn install(&self, log: &(dyn Fn(String) + Send + Sync)) -> Result<()> {
+        let r = version::install(&self.python, log).await;
+        // Whatever happened, look again at the next status call.
+        *self.check.lock().await = None;
+        *self.versions.lock().await = None;
+        r
     }
 
     async fn generate(&self, os: Os) -> Result<Value> {

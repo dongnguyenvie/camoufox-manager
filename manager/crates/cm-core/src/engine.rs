@@ -31,6 +31,16 @@ pub struct EngineStatus {
     pub version: Option<String>,
 }
 
+/// Installed versions, when the engine can tell (phase 12).
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineVersions {
+    /// Python package, e.g. `0.5.9`.
+    pub package: Option<String>,
+    /// Browser build, e.g. `158.0.1-beta.41`.
+    pub browser: Option<String>,
+}
+
 /// Settings applied for one launch. `None` = let the engine decide.
 #[derive(Clone, Debug, Default)]
 pub struct LaunchOptions {
@@ -123,6 +133,16 @@ pub trait Engine: Send + Sync {
 
     /// Installed and able to launch? Cheap enough to call on every overview.
     async fn status(&self) -> EngineStatus;
+
+    /// Package + browser versions (cached by the engine). `None` when not installed or unknown.
+    async fn versions(&self) -> Option<EngineVersions> {
+        None
+    }
+
+    /// Install or update the engine, reporting every output line to `log` (phase 12). Optional.
+    async fn install(&self, _log: &(dyn Fn(String) + Send + Sync)) -> Result<()> {
+        Err(not_implemented("engine install"))
+    }
 
     /// Generate a new pinned machine for `os` (the opaque value stored in [`Profile::machine`]).
     async fn generate(&self, os: Os) -> Result<Value>;

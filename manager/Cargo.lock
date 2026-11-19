@@ -288,6 +288,8 @@ dependencies = [
  "cm-store",
  "dotenvy",
  "muda",
+ "reqwest",
+ "serde_json",
  "tao",
  "tokio",
  "wry",

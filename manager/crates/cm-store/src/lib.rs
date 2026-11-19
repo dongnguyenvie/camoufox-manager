@@ -29,7 +29,7 @@ pub use org::{SqliteGroups, SqliteSavedViews, SqliteTags};
 pub use profiles::SqliteProfiles;
 pub use proxies::SqliteProxies;
 pub use schedules::SqliteSchedules;
-pub use settings::SqliteSettings;
+pub use settings::{SqliteApiKeys, SqliteSettings};
 pub use templates::{SqliteExtensions, SqliteTemplates};
 
 /// File name of the database inside the data dir.

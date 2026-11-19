@@ -1,3 +1,10 @@
--- 0007_settings — reserved for phase 12 (Settings, API key): anything settings needs beyond the key/value table.
--- Empty (comments only) migrations are skipped and NOT recorded, so filling this file later
--- still applies it on databases created before that phase.
+-- 0007_settings — named API keys (phase 12). The secret is never stored: only sha256(salt || secret).
+CREATE TABLE api_keys (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    salt         TEXT NOT NULL,
+    hash         TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    last_used_at TEXT,
+    revoked_at   TEXT
+);

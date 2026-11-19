@@ -102,7 +102,8 @@ fn rig(proxy_ok: bool, fail_browse: bool) -> Rig {
         templates: Arc::new(SqliteTemplates::new(db.clone())),
         extensions: Arc::new(SqliteExtensions::new(db.clone())),
         schedules: Arc::new(SqliteSchedules::new(db.clone())),
-        settings: Arc::new(SqliteSettings::new(db)),
+        settings: Arc::new(SqliteSettings::new(db.clone())),
+        api_keys: Arc::new(SqliteApiKeys::new(db)),
         clock: clock.clone(),
     };
     let m = Arc::new(Manager::new(deps, Config { proxy_base_port: 0, data_dir: PathBuf::from("/tmp"), db_path: None }));

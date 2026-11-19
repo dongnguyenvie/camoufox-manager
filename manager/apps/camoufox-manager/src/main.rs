@@ -80,6 +80,7 @@ pub fn build_manager() -> Result<Arc<Manager>> {
         extensions: Arc::new(SqliteExtensions::new(db.clone())),
         schedules: Arc::new(SqliteSchedules::new(db.clone())),
         settings: Arc::new(SqliteSettings::new(db.clone())),
+        api_keys: Arc::new(SqliteApiKeys::new(db.clone())),
         clock: Arc::new(cm_core::SystemClock),
     };
     let cfg = Config {

@@ -28,8 +28,8 @@ pub mod templates;
 pub mod transfer;
 
 use cm_core::{
-    Clock, Engine, ExtensionRepo, GroupRepo, ProfileRepo, ProxyChecker, ProxyId, ProxyRepo, SavedViewRepo, ScheduleRepo, SettingsRepo,
-    TagRepo, TemplateRepo,
+    ApiKeyRepo, Clock, Engine, ExtensionRepo, GroupRepo, ProfileRepo, ProxyChecker, ProxyId, ProxyRepo, SavedViewRepo, ScheduleRepo,
+    SettingsRepo, TagRepo, TemplateRepo,
 };
 use std::{collections::HashMap, path::PathBuf, sync::Arc};
 use tokio::{sync::Mutex, task::JoinHandle};
@@ -50,6 +50,7 @@ pub struct Deps {
     pub extensions: Arc<dyn ExtensionRepo>,
     pub schedules: Arc<dyn ScheduleRepo>,
     pub settings: Arc<dyn SettingsRepo>,
+    pub api_keys: Arc<dyn ApiKeyRepo>,
     pub clock: Arc<dyn Clock>,
 }
 

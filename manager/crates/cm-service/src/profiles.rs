@@ -203,6 +203,8 @@ impl Manager {
         // Proxy-derived geography is the default, the profile's overrides win (D4).
         let mut opts = launch_options_for(&profile, geo.as_ref(), port);
         opts.extensions = self.extension_files(id).await; // CM-1.9: assigned Firefox extensions
+        // Settings page default (phase 12); unset = the engine's own default (CAMOUFOX_HEADLESS).
+        opts.headless = self.headless_default().await;
         let session = match self.d.engine.launch(&profile, &opts).await {
             Ok(s) => s,
             Err(e) => {
