@@ -2,8 +2,9 @@
 //!
 //! - `POST /api/transfer/export/{id}`            closed profile -> zip in `<data dir>/exports`
 //! - `GET  /api/transfer/exports/{file}`         download an export (streamed)
-//! - `POST /api/transfer/import?mode=&name=`     raw zip body (streamed to a temp file) -> new profile
-//! - `POST /api/transfer/import-path`            `{ path, mode?, name? }` zip already on this machine
+//! - `POST /api/transfer/import?mode=&name=&profile=`  raw zip body (streamed to a temp file) -> new profile;
+//!   `mode=replace&profile=<id>` overwrites that closed profile's data (journalled, with backup)
+//! - `POST /api/transfer/import-path`            `{ path, mode?, name?, profile? }` zip already on this machine
 //! - `POST /api/transfer/clone/{id}`             `{ name, newMachine? }`
 //! - `POST /api/transfer/bulk`                   `{ pattern, count, os, start? }`
 
@@ -31,6 +32,8 @@ struct ImportQuery {
     #[serde(default)]
     mode: ImportIdMode,
     name: Option<String>,
+    /// Target profile id for `mode=replace`.
+    profile: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -39,6 +42,15 @@ struct ImportPath {
     #[serde(default)]
     mode: ImportIdMode,
     name: Option<String>,
+    profile: Option<String>,
+}
+
+async fn do_import(m: &Shared, p: &std::path::Path, mode: ImportIdMode, name: Option<String>, profile: Option<String>) -> ApiResult {
+    if mode == ImportIdMode::Replace {
+        let target = profile.ok_or_else(|| CmError::Invalid("mode=replace needs the id of the profile to overwrite".into()))?;
+        return ok(m.replace_from_snapshot(p, &target, name).await?);
+    }
+    ok(m.import_snapshot(p, mode, name).await?)
 }
 
 async fn export(State(m): State<Shared>, Path(id): Path<String>) -> ApiResult {
@@ -78,11 +90,11 @@ async fn import(State(m): State<Shared>, Query(q): Query<ImportQuery>, req: Requ
         }
         file.flush().await?;
         drop(file);
-        m.import_snapshot(&tmp, q.mode, q.name).await
+        do_import(&m, &tmp, q.mode, q.name, q.profile).await
     }
     .await;
     let _ = tokio::fs::remove_file(&tmp).await;
-    ok(res?)
+    res
 }
 
 async fn import_path(State(m): State<Shared>, Json(b): Json<ImportPath>) -> ApiResult {
@@ -90,7 +102,7 @@ async fn import_path(State(m): State<Shared>, Json(b): Json<ImportPath>) -> ApiR
     if !p.is_absolute() || !p.is_file() {
         return Err(CmError::Invalid("path must be an existing absolute file path".into()).into());
     }
-    ok(m.import_snapshot(&p, b.mode, b.name).await?)
+    do_import(&m, &p, b.mode, b.name, b.profile).await
 }
 
 async fn clone_profile(State(m): State<Shared>, Path(id): Path<String>, Json(b): Json<CloneRequest>) -> ApiResult {

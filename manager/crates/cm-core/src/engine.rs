@@ -166,6 +166,14 @@ pub trait Engine: Send + Sync {
         None
     }
 
+    /// Closed-profile proof (phase 15): fail with `CmError::Conflict` unless the profile is
+    /// provably closed (not running, lock free, no live browser markers); otherwise return a
+    /// guard that keeps the profile from starting until it is dropped. Engines without a lock
+    /// return a unit guard.
+    async fn hold_closed(&self, _id: &str) -> Result<Box<dyn std::any::Any + Send>> {
+        Ok(Box::new(()))
+    }
+
     /// Directory with the profile's browser data (may not exist yet).
     fn data_dir(&self, id: &str) -> PathBuf;
 

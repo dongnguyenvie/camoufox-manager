@@ -94,6 +94,9 @@ pub fn build_manager() -> Result<Arc<Manager>> {
 /// Headless mode: `camoufox-manager serve` → http://127.0.0.1:$CM_PORT, Ctrl+C / SIGTERM to quit.
 async fn serve_headless() -> Result<()> {
     let app = build_manager()?;
+    if let Err(e) = app.recover_journals().await {
+        eprintln!("Snapshot journal recovery failed: {e:#}");
+    }
     app.clone().spawn_scheduler(); // phase 10: scheduled runs
     let port = env_port("CM_PORT")?.unwrap_or(DEFAULT_PORT);
     let listener =

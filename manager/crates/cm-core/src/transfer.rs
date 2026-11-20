@@ -12,6 +12,9 @@ pub enum ImportIdMode {
     New,
     /// Keep the archived id when it is free, otherwise a fresh one.
     KeepIfFree,
+    /// Overwrite the data of an existing profile (journalled, with backup); the local id, group,
+    /// schedules and proxy assignment stay. Needs a target profile id.
+    Replace,
 }
 
 #[derive(Clone, Debug, Deserialize)]

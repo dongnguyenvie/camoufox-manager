@@ -14,6 +14,7 @@
 //! | `0005_templates.sql` | 9 Templates + extensions |
 //! | `0006_schedules.sql` | 10 Scheduling |
 //! | `0007_settings.sql` | 12 Settings / API key |
+//! | `0008_journal.sql` | 15 Snapshot apply journal |
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
@@ -39,6 +40,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(5, "0005_templates.sql"),
     migration!(6, "0006_schedules.sql"),
     migration!(7, "0007_settings.sql"),
+    migration!(8, "0008_journal.sql"),
 ];
 
 /// Only comments / whitespace?

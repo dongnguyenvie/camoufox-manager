@@ -174,6 +174,7 @@ impl Manager {
     /// else (or an anonymous caller) asks for a leased profile.
     pub async fn start_as(&self, id: &str, holder: Option<&str>) -> Result<StartResult> {
         self.lease_check_start(id, holder)?;
+        self.journal_check_start(id).await?;
         self.prune_dead().await;
         if let Some(r) = self.running.lock().await.get(id) {
             return Ok(StartResult { ws: r.ws.clone(), port: r.port, geo: None, already: true });

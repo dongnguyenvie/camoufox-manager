@@ -8,7 +8,8 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use unicode_normalization::is_nfc;
 
 pub const SNAPSHOT_SCHEMA: u32 = 1;
 pub const MANIFEST_NAME: &str = "snapshot.json";
@@ -79,6 +80,10 @@ fn invalid(msg: impl Into<String>) -> anyhow::Error {
 /// absolute path, backslash, drive prefix or control character, bounded length.
 pub fn check_rel_path(p: &str) -> Result<()> {
     let bad = || invalid(format!("unsafe snapshot path {p:?}"));
+    // NFC only: macOS (NFD on disk) and Linux (as-is) would otherwise disagree on a name's identity.
+    if !is_nfc(p) {
+        return Err(invalid(format!("snapshot path {p:?} is not Unicode NFC")));
+    }
     if p.is_empty() || p.len() > 1024 {
         return Err(invalid("snapshot path is empty or too long"));
     }
@@ -149,8 +154,20 @@ impl SnapshotManifest {
             }
             total = total.saturating_add(f.size);
         }
-        if total > MAX_TOTAL_BYTES {
-            return Err(invalid("snapshot is larger than 2 GiB"));
+        if total >= MAX_TOTAL_BYTES {
+            return Err(invalid("snapshot must be smaller than 2 GiB"));
+        }
+        // Two folders whose names differ only by case are one folder on a case-insensitive volume.
+        let mut dirs: HashMap<String, &str> = HashMap::new();
+        for f in &self.files {
+            for (i, _) in f.path.match_indices('/') {
+                let d = &f.path[..i];
+                if let Some(prev) = dirs.insert(d.to_lowercase(), d)
+                    && prev != d
+                {
+                    return Err(invalid(format!("folders {prev} and {d} differ only by case")));
+                }
+            }
         }
         // A file may not also be a parent folder of another file.
         for f in &self.files {
@@ -207,6 +224,9 @@ mod tests {
         for ok in ["a", "a/b.sqlite", "x y/z"] {
             assert!(check_rel_path(ok).is_ok(), "{ok}");
         }
+        // "é" precomposed (NFC) is fine, "e" + combining acute (NFD) is not
+        assert!(check_rel_path("caf\u{e9}/x").is_ok());
+        assert!(check_rel_path("cafe\u{301}/x").is_err(), "NFD refused");
         for bad in ["", "/etc/passwd", "../x", "a/../b", "a//b", "a/./b", "a\\b", "C:/x", "a/", "./a", "a\0b"] {
             assert!(check_rel_path(bad).is_err(), "{bad:?}");
         }
@@ -219,6 +239,14 @@ mod tests {
         assert!(manifest(vec![("a", 1), ("a/b", 1)]).validate().is_err(), "file and folder");
         assert!(manifest(vec![("../a", 1)]).validate().is_err());
         assert!(manifest(vec![("a", MAX_TOTAL_BYTES + 1)]).validate().is_err());
+        assert!(manifest(vec![("a", MAX_TOTAL_BYTES)]).validate().is_err(), "must be below 2 GiB");
+        assert!(manifest(vec![("a", MAX_TOTAL_BYTES - 1)]).validate().is_ok());
+        assert!(manifest(vec![("D/x", 1), ("d/y", 1)]).validate().is_err(), "folders differing by case");
+        assert!(manifest(vec![("D/x", 1), ("D/y", 1)]).validate().is_ok());
+        let many: Vec<(String, u64)> = (0..=MAX_ENTRIES).map(|i| (format!("f{i}"), 1)).collect();
+        assert!(manifest(many.iter().map(|(p, s)| (p.as_str(), *s)).collect()).validate().is_err(), "more than 20k files");
+        let ok: Vec<(String, u64)> = (0..MAX_ENTRIES).map(|i| (format!("f{i}"), 1)).collect();
+        assert!(manifest(ok.iter().map(|(p, s)| (p.as_str(), *s)).collect()).validate().is_ok());
         let mut m = manifest(vec![("a", 1)]);
         m.schema = 99;
         assert!(m.validate().is_err());

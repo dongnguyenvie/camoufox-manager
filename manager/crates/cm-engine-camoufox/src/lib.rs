@@ -12,6 +12,7 @@
 //! Modules: `helper` (embedded python), `machine` (pinned machine → summary, phase 4),
 //! `process` (spawn/stop/alive, phase 8), `lock` (per-profile lock + orphan cleanup, phase 8).
 
+mod closed;
 mod helper;
 mod lock;
 mod machine;
@@ -270,6 +271,16 @@ impl Engine for Camoufox {
             eprintln!("warm: {} URL(s) could not be opened: {}", n.len(), v["failed"]);
         }
         Ok(())
+    }
+
+    async fn hold_closed(&self, id: &str) -> Result<Box<dyn std::any::Any + Send>> {
+        check_id(id)?;
+        if self.procs.alive(id).await == Some(true) {
+            bail!(CmError::Conflict("profile is running; close it first".into()));
+        }
+        let dir = self.dir(id);
+        let guard = tokio::task::spawn_blocking(move || closed::prove_closed(&dir)).await??;
+        Ok(Box::new(guard))
     }
 
     async fn export_cookies(&self, p: &Profile, _format: CookieFormat) -> Result<Vec<Cookie>> {
