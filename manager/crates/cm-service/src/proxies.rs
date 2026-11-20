@@ -371,7 +371,13 @@ impl Manager {
         {
             return Ok(c.clone());
         }
-        let c = self.d.checker.check(&p).await?;
+        let c = match self.d.checker.check(&p).await {
+            Ok(c) => c,
+            Err(e) => {
+                self.notify("proxy.check_failed", serde_json::json!({ "proxy": p.name, "id": id, "error": format!("{e:#}") }), None).await;
+                return Err(e);
+            }
+        };
         self.d.proxies.set_check(id, &c).await?;
         Ok(c)
     }

@@ -374,3 +374,19 @@ async fn validation_rejects_bad_input() {
         assert!(r.m.create_schedule(i).await.is_err());
     }
 }
+
+#[tokio::test]
+async fn run_outcomes_reach_the_bell() {
+    for (fail, kind) in [(true, "schedule.failed"), (false, "schedule.finished")] {
+        let r = rig(true, fail);
+        r.m.attach_notifications(Arc::new(SqliteNotifications::new(Db::memory().unwrap())));
+        let p = profile(&r.m, "Shop").await;
+        let s = r.m.create_schedule(warm(ScheduleTarget::Profile { id: p.id.clone() })).await.unwrap();
+        r.m.run_schedule_now(s.id).await.unwrap().await.unwrap();
+        let l = r.m.notifications(10).await.unwrap();
+        assert_eq!(l.items.len(), 1, "{kind}");
+        assert_eq!(l.items[0].kind, kind);
+        assert_eq!(l.items[0].params["profile"], "Shop");
+        assert_eq!(l.items[0].params["schedule"], "warm");
+    }
+}

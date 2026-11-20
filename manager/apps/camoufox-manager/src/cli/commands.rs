@@ -113,7 +113,7 @@ pub async fn run(cmd: &Command, args: &[&str], p: &Parsed) -> Result<Output, Cli
     let c = Client::new(p)?;
     match cmd.name {
         "status" => status(&c).await,
-        "doctor" => doctor(&c).await,
+        "doctor" => doctor(&c, p).await,
         "profile list" => {
             let ov = c.get("/api/overview").await?;
             let rows: Vec<Value> = ov["profiles"].as_array().map(|a| a.iter().map(profile_row).collect()).unwrap_or_default();
@@ -273,23 +273,32 @@ async fn status(c: &Client) -> Result<Output, CliError> {
     Ok(Output { json: out, text })
 }
 
-/// Placeholder until the full diagnostics (CM-1.19): app reachable + engine ready.
-async fn doctor(c: &Client) -> Result<Output, CliError> {
-    let st = c.get("/api/settings").await?;
-    let engine_ok = st["engine"]["ready"] == true;
-    let checks = json!([
-        { "name": "app", "ok": true, "detail": c.base },
-        { "name": "engine", "ok": engine_ok, "detail": if engine_ok { st["engine"]["version"].clone() } else { st["engine"]["hint"]["detail"].clone() } },
-    ]);
-    let ok = engine_ok;
-    let text = format!(
-        "app: ok ({})\nengine: {}\n\nnote: full diagnostics (ports, relay, orphaned processes, data dir) are not implemented yet",
-        c.base,
-        if engine_ok {
-            format!("ok ({})", s(&st["engine"]["version"]))
-        } else {
-            format!("problem: {}", s(&st["engine"]["hint"]["detail"]))
+/// Local diagnostics (CM-1.19): every check with its fix. Prints the report itself and exits 1
+/// when a check failed (warnings keep exit 0), so scripts can gate on it.
+async fn doctor(c: &Client, p: &Parsed) -> Result<Output, CliError> {
+    let v = c.get("/api/doctor").await?;
+    let mut text = String::new();
+    for ch in v["checks"].as_array().into_iter().flatten() {
+        let id = ch["id"].as_str().unwrap_or_default();
+        let mark = match ch["status"].as_str() {
+            Some("ok") => "ok  ",
+            Some("warn") => "WARN",
+            _ => "FAIL",
+        };
+        text.push_str(&format!("[{mark}] {}: {}\n", cm_service::doctor::title(id), s(&ch["detail"])));
+        if let Some(h) = ch["hint"].as_str() {
+            text.push_str(&format!("       fix: {h}\n"));
         }
-    );
-    Ok(Output { json: json!({ "ok": ok, "checks": checks, "note": "placeholder: full diagnostics arrive in a later release" }), text })
+    }
+    let sm = &v["summary"];
+    text.push_str(&format!("\n{} ok, {} warning, {} failed. Nothing was sent anywhere.", sm["ok"], sm["warn"], sm["fail"]));
+    if v["ok"] == false {
+        if p.has("json") {
+            println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
+        } else {
+            println!("{text}");
+        }
+        std::process::exit(1);
+    }
+    Ok(Output { json: v, text })
 }

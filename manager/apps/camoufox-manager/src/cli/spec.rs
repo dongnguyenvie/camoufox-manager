@@ -155,10 +155,10 @@ pub const COMMANDS: &[Command] = &[
     },
     Command {
         name: "doctor",
-        summary: "Basic health check (placeholder: full diagnostics arrive in a later release)",
+        summary: "Run local diagnostics (Camoufox, helper files, data folder, database, ports, relay, leftover processes, Tailscale); exit code 1 when a check fails",
         args: &[],
         flags: &[],
-        examples: &["camoufox-manager doctor --json"],
+        examples: &["camoufox-manager doctor", "camoufox-manager doctor --json"],
         needs_app: true,
     },
     Command {

@@ -49,6 +49,8 @@ pub const ASSETS: &[Asset] = &[
     asset!("components/transfer.js", JS),
     asset!("components/org.js", JS),
     asset!("components/sheets.js", JS),
+    asset!("components/bell.js", JS),
+    asset!("components/doctor.js", JS),
     // pages
     asset!("pages/profiles.js", JS),
     asset!("pages/proxies.js", JS),

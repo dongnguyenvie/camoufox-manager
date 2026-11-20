@@ -15,6 +15,7 @@
 
 mod cli;
 mod desktop;
+mod diag;
 mod paths;
 
 use anyhow::{Context, Result};
@@ -88,7 +89,12 @@ pub fn build_manager() -> Result<Arc<Manager>> {
         db_path: db.path().map(PathBuf::from),
         data_dir,
     };
-    Ok(Arc::new(Manager::new(deps, cfg)))
+    let engine_root = cfg.data_dir.join("camoufox");
+    let manager = Arc::new(Manager::new(deps, cfg));
+    // Phase 19: bell notifications + doctor probes.
+    manager.attach_notifications(Arc::new(SqliteNotifications::new(db.clone())));
+    manager.set_probes(Arc::new(diag::AppProbes { engine_root, db }));
+    Ok(manager)
 }
 
 /// Headless mode: `camoufox-manager serve` → http://127.0.0.1:$CM_PORT, Ctrl+C / SIGTERM to quit.

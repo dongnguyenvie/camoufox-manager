@@ -16,10 +16,14 @@
 //! | `settings` | language, engine, API key | 1, 12 |
 //! | `lease` | agent lease on a profile | 8 |
 //! | `journal` | crash-safe replace of a profile's data | 15 |
+//! | `doctor` | local diagnostics (read-only probes) | 19 |
+//! | `notify` | bell notifications + optional macOS banner | 19 |
 
 pub mod cookies;
+pub mod doctor;
 pub mod journal;
 pub mod lease;
+pub mod notify;
 pub mod org;
 pub mod profiles;
 pub mod proxies;
@@ -85,6 +89,10 @@ pub struct Manager {
     relays: Mutex<HashMap<ProxyId, (u16, JoinHandle<()>)>>,
     /// Set once the snapshot apply journal has been recovered (phase 15).
     journal_ready: tokio::sync::OnceCell<usize>,
+    /// Read-only diagnostics probes (phase 19, attached by the binary).
+    probes: std::sync::OnceLock<Arc<dyn doctor::Probes>>,
+    /// Notification store (phase 19, attached by the binary).
+    notifier: std::sync::OnceLock<notify::Notifier>,
 }
 
 impl Manager {
@@ -97,6 +105,8 @@ impl Manager {
             sched: Default::default(),
             relays: Mutex::new(HashMap::new()),
             journal_ready: Default::default(),
+            probes: Default::default(),
+            notifier: Default::default(),
         }
     }
 

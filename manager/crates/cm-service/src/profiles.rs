@@ -112,6 +112,7 @@ impl Manager {
                     self.release_relay(px).await;
                 }
                 println!("{id} exited on its own");
+                self.notify_crash_of(&id).await;
             }
         }
     }
@@ -131,6 +132,7 @@ impl Manager {
         let mut crashes = HashMap::new();
         for p in &profiles {
             if let Some(c) = self.d.engine.crashed(&p.id).await {
+                self.notify_crash(&p.id, &p.name, &c).await;
                 crashes.insert(p.id.clone(), c);
             }
         }

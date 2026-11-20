@@ -271,8 +271,13 @@ pub(crate) fn prune_backups(profile_dir: &Path, keep: &Path) {
 }
 
 impl Manager {
+    /// The app database file that holds `snapshot_journal`.
+    pub(crate) fn db_path(&self) -> PathBuf {
+        self.cfg.db_path.clone().unwrap_or_else(|| self.cfg.data_dir.join(cm_core_db_file()))
+    }
+
     pub(crate) fn journal(&self) -> Result<Journal> {
-        Journal::open(&self.cfg.db_path.clone().unwrap_or_else(|| self.cfg.data_dir.join(cm_core_db_file())))
+        Journal::open(&self.db_path())
     }
 
     /// Resolve every unresolved journal row (startup / first use). Returns how many were repaired.

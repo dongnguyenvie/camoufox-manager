@@ -16,11 +16,15 @@
 //! | `sheets` | `/api/sheets…` | 11 |
 //! | `settings` | `/api/settings` | 1, 12 |
 //! | `lease` | `/api/profiles/{id}/lease…` | 8 |
+//! | `doctor` | `/api/doctor` | 19 |
+//! | `notifications` | `/api/notifications…` (+ import/export "finished" hook) | 19 |
 //! | `auth` | API-key middleware (pass-through until phase 12) | 12 |
 
 mod auth;
 mod cookies;
+mod doctor;
 mod lease;
+mod notifications;
 mod org;
 mod profiles;
 mod proxies;
@@ -82,6 +86,9 @@ pub fn router(m: Shared) -> Router {
         .merge(schedules::routes())
         .merge(sheets::routes())
         .merge(settings::routes())
-        .merge(lease::routes());
+        .merge(lease::routes())
+        .merge(doctor::routes())
+        .merge(notifications::routes());
+    let api = notifications::layer(api, m.clone());
     auth::apply(api, m.clone()).merge(ui::routes()).with_state(m)
 }

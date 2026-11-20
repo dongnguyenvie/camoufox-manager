@@ -409,7 +409,9 @@ impl Manager {
             message: Some(msg.to_string()),
             trigger: trigger.to_string(),
         };
-        self.d.schedules.start_run(&run).await.map(|_| ())
+        self.d.schedules.start_run(&run).await?;
+        self.notify_schedule_run(s, profile, outcome, msg).await;
+        Ok(())
     }
 
     async fn targets(&self, t: &ScheduleTarget) -> Result<Vec<ProfileId>> {
@@ -475,6 +477,7 @@ impl Manager {
             Err(e) => (ScheduleRunOutcome::Failed, format!("{e:#}")),
         };
         let _ = self.d.schedules.finish_run(id, self.d.clock.now(), outcome, Some(&msg)).await;
+        self.notify_schedule_run(s, Some(profile), outcome, &msg).await;
     }
 
     async fn is_busy(&self, profile: &str) -> bool {

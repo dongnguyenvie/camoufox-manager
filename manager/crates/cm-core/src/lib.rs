@@ -19,12 +19,14 @@
 //! | cookies | [`cookies`] | (via [`Engine`]) |
 //! | transfer | [`transfer`] | — (types only) |
 //! | sheets | [`sheets`] | — (types only) |
+//! | notifications | [`notification`] | [`NotificationRepo`] |
 //! | time | [`clock`] | [`Clock`] |
 
 pub mod clock;
 pub mod cookies;
 pub mod engine;
 pub mod error;
+pub mod notification;
 pub mod org;
 pub mod profile;
 pub mod proxy;
@@ -38,6 +40,7 @@ pub mod transfer;
 pub use clock::{Clock, SystemClock};
 pub use engine::{CrashInfo, Engine, EngineHint, EngineStatus, EngineVersions, LaunchOptions, MachineSummary, Session};
 pub use error::{CmError, not_implemented};
+pub use notification::{NewNotification, Notification, NotificationRepo};
 pub use org::{Group, GroupRepo, SavedView, SavedViewRepo, Tag, TagRepo};
 pub use profile::{CanvasMode, NewProfile, Os, Profile, ProfileRepo, ProfileSettings, WebRtcMode};
 pub use proxy::{NewProxy, Proxy, ProxyCheck, ProxyChecker, ProxyId, ProxyRepo, ProxyScheme};

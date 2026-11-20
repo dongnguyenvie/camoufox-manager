@@ -9,8 +9,10 @@
 //!
 //! rusqlite is synchronous; queries are tiny and local, so repos run them inline under a mutex.
 
+pub mod health;
 pub mod legacy;
 pub mod migrate;
+pub mod notifications;
 pub mod org;
 pub mod profiles;
 pub mod proxies;
@@ -25,6 +27,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+pub use notifications::SqliteNotifications;
 pub use org::{SqliteGroups, SqliteSavedViews, SqliteTags};
 pub use profiles::SqliteProfiles;
 pub use proxies::SqliteProxies;

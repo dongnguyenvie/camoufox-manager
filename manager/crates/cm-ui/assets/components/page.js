@@ -15,6 +15,7 @@ CM.components.CmPage = {
       <slot name="tools"></slot>
       <div class="flex-1"></div>
       <slot name="actions"></slot>
+      <cm-bell/>
     </header>
     <div class="flex-1 min-h-0 flex flex-col px-5 pt-3.5 pb-4 max-sm:px-4"><slot></slot></div>
   </section>`,

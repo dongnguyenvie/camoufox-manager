@@ -12,7 +12,7 @@ use std::{
 use tokio::process::Command;
 
 /// Every helper file. A new helper module must be added here.
-const FILES: &[(&str, &str)] = &[
+pub(crate) const FILES: &[(&str, &str)] = &[
     ("__main__.py", include_str!("../python/helper/__main__.py")),
     ("common.py", include_str!("../python/helper/common.py")),
     ("generate.py", include_str!("../python/helper/generate.py")),

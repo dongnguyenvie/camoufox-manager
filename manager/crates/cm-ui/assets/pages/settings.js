@@ -277,6 +277,8 @@ CM.pages.settings = {
         </div>
         <p class="m-0 text-xs text-faint" style="margin-top:6px">{{ t('settings.portsHint') }}</p>
       </section>
+
+      <cm-doctor></cm-doctor>
     </div>
 
     <cm-dialog :open="revoke.open" :title="t('settings.revokeTitle')" :busy="revoke.busy" @close="revoke.open = false">

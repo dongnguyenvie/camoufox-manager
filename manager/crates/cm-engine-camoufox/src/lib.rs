@@ -13,11 +13,14 @@
 //! `process` (spawn/stop/alive, phase 8), `lock` (per-profile lock + orphan cleanup, phase 8).
 
 mod closed;
+mod diag;
 mod helper;
 mod lock;
 mod machine;
 mod process;
 mod version;
+
+pub use diag::{HelperState, Orphan, find_orphans, helper_state};
 
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
