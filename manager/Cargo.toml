@@ -15,6 +15,8 @@ cm-engine-camoufox = { path = "crates/cm-engine-camoufox" }
 cm-service = { path = "crates/cm-service" }
 cm-api = { path = "crates/cm-api" }
 cm-ui = { path = "crates/cm-ui" }
+cm-tailscale = { path = "crates/cm-tailscale" }
+cm-sync = { path = "crates/cm-sync" }
 
 anyhow = "1.0.104"
 async-trait = "0.1"

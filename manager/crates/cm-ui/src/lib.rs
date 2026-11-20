@@ -57,6 +57,7 @@ pub const ASSETS: &[Asset] = &[
     asset!("pages/templates.js", JS),
     asset!("pages/schedules.js", JS),
     asset!("pages/settings.js", JS),
+    asset!("pages/devices.js", JS),
 ];
 
 /// Asset by URL path (without leading `/`).

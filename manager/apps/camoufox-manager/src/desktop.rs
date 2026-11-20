@@ -22,6 +22,7 @@ pub fn run() -> Result<()> {
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", env_port("CM_PORT")?.unwrap_or(0))).await?;
         let port = listener.local_addr()?.port();
         app.clone().spawn_scheduler(); // phase 10: scheduled runs
+        cm_api::sync::start(app.clone()).await; // phase 16: device sync listener
         let r = cm_api::router(app.clone());
         tokio::spawn(async move {
             let _ = axum::serve(listener, r).await;

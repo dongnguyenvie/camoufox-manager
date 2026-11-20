@@ -1,0 +1,12 @@
+{
+  "Version": "1.104.1-t7f4efe814-g4939ea2e4",
+  "BackendState": "NeedsLogin",
+  "AuthURL": "",
+  "TailscaleIPs": null,
+  "Self": { "HostName": "Test Mac", "DNSName": "", "TailscaleIPs": null },
+  "Health": ["You are logged out."],
+  "MagicDNSSuffix": "",
+  "CurrentTailnet": null,
+  "CertDomains": null,
+  "User": null
+}

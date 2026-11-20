@@ -7,6 +7,7 @@ const NAV = [
   { key: 'proxies', icon: 'network', label: 'nav.proxies' },
   { key: 'templates', icon: 'layers', label: 'nav.templates' },
   { key: 'schedules', icon: 'calendar', label: 'nav.schedules' },
+  { key: 'devices', icon: 'devices', label: 'nav.devices' },
   { key: 'settings', icon: 'settings', label: 'nav.settings' },
 ];
 

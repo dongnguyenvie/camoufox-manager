@@ -12,6 +12,9 @@
 //!
 //! Environment: `CM_PORT` (UI/API port, default 7878), `CM_PROXY_BASE_PORT` (first relay port,
 //! default 31000), `CAMOUFOX_PYTHON`, `CAMOUFOX_HEADLESS=1`, `PROXY_FILE` (legacy import only).
+//! Device sync (phase 16): `CM_SYNC_PORT` (sync listener on 127.0.0.1, default 7879),
+//! `CM_SYNC_HTTPS_PORT` (`tailscale serve --https` port, default 8443), `CM_SYNC_ADVERTISE`
+//! (`host:port` advertised as plain HTTP instead of the tailnet; tests only), `CM_TAILSCALE_BIN`.
 
 mod cli;
 mod desktop;
@@ -87,14 +90,38 @@ pub fn build_manager() -> Result<Arc<Manager>> {
     let cfg = Config {
         proxy_base_port: env_port("CM_PROXY_BASE_PORT")?.unwrap_or(DEFAULT_PROXY_BASE_PORT),
         db_path: db.path().map(PathBuf::from),
-        data_dir,
+        data_dir: data_dir.clone(),
     };
     let engine_root = cfg.data_dir.join("camoufox");
     let manager = Arc::new(Manager::new(deps, cfg));
     // Phase 19: bell notifications + doctor probes.
     manager.attach_notifications(Arc::new(SqliteNotifications::new(db.clone())));
-    manager.set_probes(Arc::new(diag::AppProbes { engine_root, db }));
+    manager.set_probes(Arc::new(diag::AppProbes { engine_root, db: db.clone() }));
+    // Device sync is optional: without it (bad key file, …) the rest of the app runs normally.
+    match build_device_hub(&data_dir, &db) {
+        Ok(hub) => manager.set_device_hub(hub),
+        Err(e) => eprintln!("Device sync disabled: {e:#}"),
+    }
     Ok(manager)
+}
+
+/// Device identity + registry + Tailscale probe (phase 16). The listener starts in [`cm_api::sync::start`].
+fn build_device_hub(data_dir: &std::path::Path, db: &Db) -> Result<Arc<cm_sync::DeviceHub>> {
+    let identity = cm_sync::Identity::load_or_create(data_dir)?;
+    let cfg = cm_sync::HubConfig {
+        sync_port: env_port("CM_SYNC_PORT")?.unwrap_or(cm_sync::DEFAULT_SYNC_PORT),
+        https_port: env_port("CM_SYNC_HTTPS_PORT")?.unwrap_or(cm_tailscale::DEFAULT_HTTPS_PORT),
+        advertise: std::env::var("CM_SYNC_ADVERTISE").ok().filter(|s| !s.trim().is_empty()),
+        device_name: cm_sync::local_device_name(),
+    };
+    let deps = cm_sync::HubDeps {
+        identity: Arc::new(identity),
+        repo: Arc::new(SqliteDevices::new(db.clone())),
+        tailscale: Arc::new(cm_tailscale::Cli::detect()),
+        settings: Arc::new(SqliteSettings::new(db.clone())),
+        clock: Arc::new(cm_core::SystemClock),
+    };
+    Ok(Arc::new(cm_sync::DeviceHub::new(cfg, deps)))
 }
 
 /// Headless mode: `camoufox-manager serve` → http://127.0.0.1:$CM_PORT, Ctrl+C / SIGTERM to quit.
@@ -104,6 +131,7 @@ async fn serve_headless() -> Result<()> {
         eprintln!("Snapshot journal recovery failed: {e:#}");
     }
     app.clone().spawn_scheduler(); // phase 10: scheduled runs
+    cm_api::sync::start(app.clone()).await; // phase 16: device sync listener
     let port = env_port("CM_PORT")?.unwrap_or(DEFAULT_PORT);
     let listener =
         tokio::net::TcpListener::bind(("127.0.0.1", port)).await.with_context(|| format!("cannot listen on 127.0.0.1:{port}"))?;

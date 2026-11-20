@@ -16,6 +16,7 @@
 //! | templates + extensions | [`template`] | [`TemplateRepo`], [`ExtensionRepo`] |
 //! | scheduling | [`schedule`] | [`ScheduleRepo`] |
 //! | settings | [`settings`] | [`SettingsRepo`], [`ApiKeyRepo`] |
+//! | paired devices (sync) | [`device`] | [`DeviceRepo`] |
 //! | cookies | [`cookies`] | (via [`Engine`]) |
 //! | transfer | [`transfer`] | — (types only) |
 //! | sheets | [`sheets`] | — (types only) |
@@ -24,6 +25,7 @@
 
 pub mod clock;
 pub mod cookies;
+pub mod device;
 pub mod engine;
 pub mod error;
 pub mod notification;
@@ -38,6 +40,7 @@ pub mod template;
 pub mod transfer;
 
 pub use clock::{Clock, SystemClock};
+pub use device::{Device, DeviceRepo};
 pub use engine::{CrashInfo, Engine, EngineHint, EngineStatus, EngineVersions, LaunchOptions, MachineSummary, Session};
 pub use error::{CmError, not_implemented};
 pub use notification::{NewNotification, Notification, NotificationRepo};

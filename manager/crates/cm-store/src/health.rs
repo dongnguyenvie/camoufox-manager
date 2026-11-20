@@ -68,9 +68,10 @@ mod tests {
         let path = dir.join(crate::DB_FILE);
         drop(db);
         let mut bytes = std::fs::read(&path).unwrap();
-        // Scribble over a page in the middle (not the header: the file must still open).
-        let at = bytes.len() / 2;
-        for b in &mut bytes[at..at + 2048] {
+        // Scribble over most pages after the first quarter (never page 1: the file must still open),
+        // so the damage always hits live b-tree pages whatever the migrations' page layout is.
+        let (from, to) = (bytes.len() / 4, bytes.len() - 4096);
+        for b in &mut bytes[from..to] {
             *b = 0xA5;
         }
         std::fs::write(&path, bytes).unwrap();

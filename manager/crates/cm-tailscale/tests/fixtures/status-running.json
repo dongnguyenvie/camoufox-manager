@@ -1,0 +1,31 @@
+{
+  "Version": "1.104.1-t7f4efe814-g4939ea2e4",
+  "TUN": false,
+  "BackendState": "Running",
+  "HaveNodeKey": true,
+  "AuthURL": "",
+  "TailscaleIPs": ["100.100.1.2", "fd7a:115c:a1e0::1:2"],
+  "Self": {
+    "ID": "n1",
+    "PublicKey": "nodekey:0000000000000000000000000000000000000000000000000000000000000000",
+    "HostName": "Test Mac",
+    "DNSName": "test-mac.tail0000.ts.net.",
+    "OS": "macOS",
+    "UserID": 1234567890,
+    "TailscaleIPs": ["fd7a:115c:a1e0::1:2", "100.100.1.2"],
+    "Online": true
+  },
+  "Health": [],
+  "MagicDNSSuffix": "tail0000.ts.net",
+  "CurrentTailnet": { "Name": "tester@example.com", "MagicDNSSuffix": "tail0000.ts.net", "MagicDNSEnabled": true },
+  "CertDomains": ["test-mac.tail0000.ts.net"],
+  "Peer": {
+    "nodekey:1111111111111111111111111111111111111111111111111111111111111111": {
+      "HostName": "Other Mac",
+      "DNSName": "other-mac.tail0000.ts.net.",
+      "TailscaleIPs": ["100.100.1.3"],
+      "Online": true
+    }
+  },
+  "User": { "1234567890": { "ID": 1234567890, "LoginName": "tester@example.com", "DisplayName": "Tester" } }
+}

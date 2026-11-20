@@ -16,6 +16,7 @@
 //! | `0007_settings.sql` | 12 Settings / API key |
 //! | `0008_journal.sql` | 15 Snapshot apply journal |
 //! | `0009_notifications.sql` | 19 Notifications (bell) |
+//! | `0010_devices.sql` | 16 Paired devices (sync) |
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
@@ -43,6 +44,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(7, "0007_settings.sql"),
     migration!(8, "0008_journal.sql"),
     migration!(9, "0009_notifications.sql"),
+    migration!(10, "0010_devices.sql"),
 ];
 
 /// Only comments / whitespace?
@@ -83,9 +85,11 @@ mod tests {
 
     #[test]
     fn versions_are_ordered_and_named() {
-        // Strictly increasing (0008 belongs to a parallel phase, so gaps are allowed).
-        for (i, m) in MIGRATIONS.iter().enumerate() {
-            assert!(i == 0 || m.version > MIGRATIONS[i - 1].version);
+        // Strictly increasing (phases may land out of order, e.g. 0010 before 0009).
+        for w in MIGRATIONS.windows(2) {
+            assert!(w[0].version < w[1].version, "{} before {}", w[0].name, w[1].name);
+        }
+        for m in MIGRATIONS {
             assert!(m.name.starts_with(&format!("{:04}_", m.version)));
         }
     }

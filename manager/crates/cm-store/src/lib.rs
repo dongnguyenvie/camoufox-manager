@@ -3,12 +3,13 @@
 //! - [`Db`]: shared connection + migration runner ([`migrate`]).
 //! - One module per area, each implementing its cm-core repo trait on a small struct that
 //!   holds a [`Db`]: `profiles`, `proxies`, `settings` (phase 1), `org` (7), `templates` (9),
-//!   `schedules` (10). Stubs return `CmError::NotImplemented` until their phase lands.
+//!   `schedules` (10), `devices` (16). Stubs return `CmError::NotImplemented` until their phase lands.
 //! - [`legacy`]: one-time import of the pre-SQLite files (`state.json`, `proxies.txt`,
 //!   `camoufox/profiles/*/profile.json`).
 //!
 //! rusqlite is synchronous; queries are tiny and local, so repos run them inline under a mutex.
 
+pub mod devices;
 pub mod health;
 pub mod legacy;
 pub mod migrate;
@@ -27,6 +28,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+pub use devices::SqliteDevices;
 pub use notifications::SqliteNotifications;
 pub use org::{SqliteGroups, SqliteSavedViews, SqliteTags};
 pub use profiles::SqliteProfiles;

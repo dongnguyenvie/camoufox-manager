@@ -153,7 +153,10 @@ pub fn title(id: &str) -> &'static str {
 
 /// Plain `fn` so tests can call it with a temp dir.
 pub fn check_data_dir(dir: &Path) -> Check {
-    let probe = dir.join(format!(".doctor-probe-{}", std::process::id()));
+    // Unique per call: two checks in one process (or tests sharing a dir) must not delete each other's probe.
+    static SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let probe = dir.join(format!(".doctor-probe-{}-{n}", std::process::id()));
     let r = std::fs::create_dir_all(dir).and_then(|_| std::fs::write(&probe, b"ok")).and_then(|_| std::fs::remove_file(&probe));
     match r {
         Ok(()) => check("data.dir", Status::Ok, format!("{} is writable", dir.display())),

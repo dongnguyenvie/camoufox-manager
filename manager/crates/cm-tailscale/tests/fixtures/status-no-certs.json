@@ -1,0 +1,11 @@
+{
+  "Version": "1.104.1-t7f4efe814-g4939ea2e4",
+  "BackendState": "Running",
+  "TailscaleIPs": ["100.100.1.2"],
+  "Self": { "HostName": "Test Mac", "DNSName": "test-mac.tail0000.ts.net.", "UserID": 7, "TailscaleIPs": ["100.100.1.2"] },
+  "Health": ["some warning"],
+  "MagicDNSSuffix": "tail0000.ts.net",
+  "CurrentTailnet": { "Name": "tester@example.com", "MagicDNSSuffix": "tail0000.ts.net", "MagicDNSEnabled": true },
+  "CertDomains": null,
+  "User": { "7": { "LoginName": "tester@example.com" } }
+}

@@ -18,6 +18,10 @@
 //! | `journal` | crash-safe replace of a profile's data | 15 |
 //! | `doctor` | local diagnostics (read-only probes) | 19 |
 //! | `notify` | bell notifications + optional macOS banner | 19 |
+//!
+//! Device sync (phase 16): the app binary builds a [`cm_sync::DeviceHub`] and hands it over with
+//! [`Manager::set_device_hub`]; routes and the sync engine reach it through [`Manager::device_hub`]
+//! (`None` when it could not be created, e.g. the key file is unreadable: the rest of the app works).
 
 pub mod cookies;
 pub mod doctor;
@@ -93,6 +97,8 @@ pub struct Manager {
     probes: std::sync::OnceLock<Arc<dyn doctor::Probes>>,
     /// Notification store (phase 19, attached by the binary).
     notifier: std::sync::OnceLock<notify::Notifier>,
+    /// Device sync (phase 16), set once by the app binary.
+    device_hub: std::sync::OnceLock<Arc<cm_sync::DeviceHub>>,
 }
 
 impl Manager {
@@ -107,7 +113,18 @@ impl Manager {
             journal_ready: Default::default(),
             probes: Default::default(),
             notifier: Default::default(),
+            device_hub: Default::default(),
         }
+    }
+
+    /// Install the device hub (phase 16). Only the first call wins.
+    pub fn set_device_hub(&self, hub: Arc<cm_sync::DeviceHub>) {
+        let _ = self.device_hub.set(hub);
+    }
+
+    /// The device hub, when device sync is available in this process.
+    pub fn device_hub(&self) -> Option<&Arc<cm_sync::DeviceHub>> {
+        self.device_hub.get()
     }
 
     pub fn config(&self) -> &Config {

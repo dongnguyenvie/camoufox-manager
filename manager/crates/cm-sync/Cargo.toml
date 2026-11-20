@@ -1,0 +1,21 @@
+[package]
+name = "cm-sync"
+description = "Device sync over Tailscale: identity, pairing, signed requests, source policy, peer client (phase 16)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cm-core.workspace = true
+cm-tailscale.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+base64.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+ed25519-dalek = "2.2"
+sha2 = "0.10"
+url = "2"
