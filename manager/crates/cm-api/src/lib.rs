@@ -20,6 +20,7 @@
 //! | `notifications` | `/api/notifications…` (+ import/export "finished" hook) | 19 |
 //! | `auth` | API-key middleware (pass-through until phase 12) | 12 |
 //! | `devices` | `/api/devices…` (pairing, reachability, device list) | 16 |
+//! | `sync_ui` | `/api/sync/…` (diff, start, progress, cancel); the peer side is `sync_peer` on the sync listener | 17 |
 //!
 //! [`sync`] is a separate app for the sync listener (`127.0.0.1:CM_SYNC_PORT`, phase 16), never
 //! merged into [`router`].
@@ -37,6 +38,8 @@ mod schedules;
 mod settings;
 mod sheets;
 pub mod sync;
+mod sync_peer;
+mod sync_ui;
 mod templates;
 mod transfer;
 mod ui;
@@ -95,7 +98,8 @@ pub fn router(m: Shared) -> Router {
         .merge(lease::routes())
         .merge(doctor::routes())
         .merge(notifications::routes())
-        .merge(devices::routes());
+        .merge(devices::routes())
+        .merge(sync_ui::routes());
     let api = notifications::layer(api, m.clone());
     auth::apply(api, m.clone()).merge(ui::routes()).with_state(m)
 }

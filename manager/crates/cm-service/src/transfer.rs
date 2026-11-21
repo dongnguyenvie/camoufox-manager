@@ -293,7 +293,7 @@ fn check_no_zip64(path: &Path) -> Result<()> {
 
 /// Open an untrusted archive and return its validated manifest. Every entry must be a plain
 /// file/dir named `snapshot.json` or `data/<safe path>`, listed in the manifest exactly once.
-fn read_manifest(path: &Path) -> Result<SnapshotManifest> {
+pub(crate) fn read_manifest(path: &Path) -> Result<SnapshotManifest> {
     check_no_zip64(path)?;
     let mut zip = ZipArchive::new(BufReader::new(File::open(path)?)).map_err(|e| invalid(format!("not a valid zip archive: {e}")))?;
     // Files + snapshot.json; a directory entry counts too.
@@ -470,7 +470,7 @@ impl Manager {
     }
 
     /// Fail unless the profile is provably closed (not started by this app, engine does not see it).
-    async fn ensure_closed(&self, id: &str) -> Result<()> {
+    pub(crate) async fn ensure_closed(&self, id: &str) -> Result<()> {
         if self.running.lock().await.contains_key(id) || self.d.engine.alive(id).await == Some(true) {
             bail!(CmError::Conflict("stop the profile first; it must be closed".into()));
         }

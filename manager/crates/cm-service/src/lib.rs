@@ -16,6 +16,7 @@
 //! | `settings` | language, engine, API key | 1, 12 |
 //! | `lease` | agent lease on a profile | 8 |
 //! | `journal` | crash-safe replace of a profile's data | 15 |
+//! | `sync` | device sync engine: manifest, diff, chunked transfer, apply | 17 |
 //! | `doctor` | local diagnostics (read-only probes) | 19 |
 //! | `notify` | bell notifications + optional macOS banner | 19 |
 //!
@@ -34,6 +35,7 @@ pub mod proxies;
 pub mod scheduler;
 pub mod settings;
 pub mod sheets;
+pub mod sync;
 pub mod templates;
 pub mod transfer;
 
@@ -99,6 +101,8 @@ pub struct Manager {
     notifier: std::sync::OnceLock<notify::Notifier>,
     /// Device sync (phase 16), set once by the app binary.
     device_hub: std::sync::OnceLock<Arc<cm_sync::DeviceHub>>,
+    /// Device sync engine state: jobs and the content-hash cache (phase 17).
+    sync: sync::SyncState,
 }
 
 impl Manager {
@@ -114,6 +118,7 @@ impl Manager {
             probes: Default::default(),
             notifier: Default::default(),
             device_hub: Default::default(),
+            sync: Default::default(),
         }
     }
 

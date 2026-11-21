@@ -141,7 +141,7 @@ async fn not_found() -> Response {
 
 /// Routes that require a device signature. Phase 17: merge the sync-engine routes here.
 fn signed_routes() -> Router<Shared> {
-    Router::new().route("/sync/v1/hello", get(hello).post(hello))
+    Router::new().route("/sync/v1/hello", get(hello).post(hello)).merge(super::sync_peer::routes())
 }
 
 /// The whole sync listener app (state applied). Serve it with connect info:

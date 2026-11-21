@@ -339,6 +339,7 @@ ICONS.devices = ['M3 5h12v9H3z', 'M1 18h16', 'M18 8h4v11h-4z', 'M20 16h.01'];
       const serve = Vue.reactive({ open: false, busy: false });
       const fallback = Vue.reactive({ open: false, busy: false });
       const revoke = Vue.reactive({ open: false, dev: null, busy: false });
+      const syncDev = Vue.ref(null); // device whose Sync dialog is open (components/sync.js)
       const busy = Vue.reactive({ refresh: false, regen: false, ping: '' });
       let tick = null, offerAt = 0;
 
@@ -426,7 +427,7 @@ ICONS.devices = ['M3 5h12v9H3z', 'M1 18h16', 'M18 8h4v11h-4z', 'M20 16h.01'];
       const short = fp => fp ? fp.slice(0, 16).replace(/(.{4})/g, '$1 ').trim() + '…' : '';
 
       return {
-        st, ts, dot, devices, offer, left, qr, add, serve, fallback, revoke, busy,
+        st, ts, dot, devices, offer, left, qr, add, serve, fallback, revoke, syncDev, busy,
         refresh, regenerate, runServe, runFallback, pair, ping, doRevoke, remove, copy, mmss, short, ago: fmt.ago,
       };
     },
@@ -528,6 +529,7 @@ ICONS.devices = ['M3 5h12v9H3z', 'M1 18h16', 'M18 8h4v11h-4z', 'M20 16h.01'];
                 <td>{{ ago(d.lastSeenAt) }}<br><code v-if="d.lastSeenAddr" class="text-xs text-faint">{{ d.lastSeenAddr }}</code></td>
                 <td>
                   <div class="flex gap-2 flex-wrap justify-end">
+                    <button v-if="!d.revokedAt && d.url" class="btn btn-start" @click="syncDev = d">{{ t('sync.button') }}</button>
                     <button v-if="!d.revokedAt && d.url" class="btn" :disabled="busy.ping === d.id" @click="ping(d)">{{ t('devices.ping') }}</button>
                     <button v-if="!d.revokedAt" class="btn" @click="revoke.dev = d; revoke.open = true">{{ t('devices.revoke') }}</button>
                     <button v-else class="btn" @click="remove(d)">{{ t('devices.remove') }}</button>
@@ -539,6 +541,8 @@ ICONS.devices = ['M3 5h12v9H3z', 'M1 18h16', 'M18 8h4v11h-4z', 'M20 16h.01'];
         </div>
       </section>
     </div>
+
+    <cm-sync v-if="syncDev" :device="syncDev" @close="syncDev = null"/>
 
     <cm-dialog :open="serve.open" :title="t('devices.serveTitle')" :busy="serve.busy" :width="560" @close="serve.open = false">
       <p class="m-0 text-[13px] text-muted">{{ t('devices.serveBody') }}</p>

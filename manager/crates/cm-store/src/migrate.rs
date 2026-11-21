@@ -17,6 +17,7 @@
 //! | `0008_journal.sql` | 15 Snapshot apply journal |
 //! | `0009_notifications.sql` | 19 Notifications (bell) |
 //! | `0010_devices.sql` | 16 Paired devices (sync) |
+//! | `0011_sync_state.sql` | 17 Per-profile per-peer sync state |
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
@@ -45,6 +46,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(8, "0008_journal.sql"),
     migration!(9, "0009_notifications.sql"),
     migration!(10, "0010_devices.sql"),
+    migration!(11, "0011_sync_state.sql"),
 ];
 
 /// Only comments / whitespace?
