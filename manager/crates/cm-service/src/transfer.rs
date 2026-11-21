@@ -183,6 +183,7 @@ fn write_zip_with(data: &Path, mut manifest: SnapshotManifest, out: &Path, metho
     let (found, skipped) = if data.is_dir() { walk(data)? } else { (Vec::new(), Vec::new()) };
     manifest.files =
         found.iter().map(|f| Ok(FileEntry { path: f.rel.clone(), size: f.size, sha256: sha256_file(&f.abs)? })).collect::<Result<_>>()?;
+    manifest.seal();
     manifest.validate()?;
 
     let part = out.with_extension("zip.part");
@@ -538,6 +539,7 @@ impl Manager {
                 proxy,
             },
             files: Vec::new(),
+            integrity: None,
         };
         let dir = self.exports_dir();
         fs::create_dir_all(&dir)?;
@@ -834,6 +836,7 @@ mod tests {
                 proxy: None,
             },
             files: vec![],
+            integrity: None,
         }
     }
 

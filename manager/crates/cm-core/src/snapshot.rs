@@ -8,10 +8,13 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use unicode_normalization::is_nfc;
 
 pub const SNAPSHOT_SCHEMA: u32 = 1;
+/// Version of the metadata seal ([`Integrity`]). Bump it when the sealed field set changes.
+pub const INTEGRITY_VERSION: u32 = 1;
 pub const MANIFEST_NAME: &str = "snapshot.json";
 pub const DATA_PREFIX: &str = "data/";
 /// Import limits (phase 15 may tighten): entries, total uncompressed bytes, manifest size.
@@ -70,6 +73,22 @@ pub struct SnapshotManifest {
     pub arch: String,
     pub profile: SnapshotProfile,
     pub files: Vec<FileEntry>,
+    /// Seal over every other field of this manifest (B6). Absent = snapshot written before the
+    /// seal existed: accepted as legacy, without the metadata check.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integrity: Option<Integrity>,
+}
+
+/// SHA-256 over the canonical JSON of all manifest fields except `integrity` itself.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Integrity {
+    pub version: u32,
+    /// Lowercase hex SHA-256.
+    pub sha256: String,
+}
+
+fn hex(b: &[u8]) -> String {
+    b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
 fn invalid(msg: impl Into<String>) -> anyhow::Error {
@@ -123,10 +142,54 @@ pub fn is_excluded(name: &str, is_dir: bool) -> bool {
 }
 
 impl SnapshotManifest {
+    /// Digest of every field except `integrity`. Field order is the struct declaration order, so the
+    /// same values always serialize to the same bytes.
+    fn metadata_digest(&self) -> String {
+        #[derive(Serialize)]
+        struct Covered<'a> {
+            schema: u32,
+            app_version: &'a str,
+            created_at: &'a str,
+            camoufox_build: &'a Option<String>,
+            os: &'a str,
+            arch: &'a str,
+            profile: &'a SnapshotProfile,
+            files: &'a [FileEntry],
+        }
+        let covered = Covered {
+            schema: self.schema,
+            app_version: &self.app_version,
+            created_at: &self.created_at,
+            camoufox_build: &self.camoufox_build,
+            os: &self.os,
+            arch: &self.arch,
+            profile: &self.profile,
+            files: &self.files,
+        };
+        // Plain derived structs of owned data: serialization cannot fail.
+        hex(&Sha256::digest(serde_json::to_vec(&covered).expect("manifest serializes")))
+    }
+
+    /// Seal the current contents (writer side). Call after the last field change.
+    pub fn seal(&mut self) {
+        self.integrity = Some(Integrity { version: INTEGRITY_VERSION, sha256: self.metadata_digest() });
+    }
+
     /// Structural validation of a manifest read from an untrusted archive.
     pub fn validate(&self) -> Result<()> {
         if self.schema != SNAPSHOT_SCHEMA {
             return Err(invalid(format!("unsupported snapshot schema {} (this app reads {SNAPSHOT_SCHEMA})", self.schema)));
+        }
+        match &self.integrity {
+            // Legacy snapshot: no seal, only the structural checks below apply.
+            None => {}
+            Some(i) if i.version != INTEGRITY_VERSION => {
+                return Err(invalid(format!("unsupported snapshot integrity version {} (this app reads {INTEGRITY_VERSION})", i.version)));
+            }
+            Some(i) if i.sha256 != self.metadata_digest() => {
+                return Err(invalid("snapshot.json was edited: its fields do not match the integrity seal"));
+            }
+            Some(_) => {}
         }
         let p = &self.profile;
         if !valid_id(&p.id) {
@@ -216,6 +279,7 @@ mod tests {
                 proxy: None,
             },
             files: files.into_iter().map(|(p, size)| FileEntry { path: p.into(), size, sha256: "a".repeat(64) }).collect(),
+            integrity: None,
         }
     }
 
@@ -256,6 +320,43 @@ mod tests {
         let mut m = manifest(vec![]);
         m.profile.id = "../x".into();
         assert!(m.validate().is_err());
+    }
+
+    #[test]
+    fn integrity_seal_covers_metadata() {
+        // Untouched sealed snapshot: accepted, also after a JSON round trip.
+        let mut m = manifest(vec![("a", 1), ("d/b", 2)]);
+        m.seal();
+        assert!(m.validate().is_ok(), "untouched");
+        let json = serde_json::to_value(&m).unwrap();
+        assert!(serde_json::from_value::<SnapshotManifest>(json.clone()).unwrap().validate().is_ok(), "round trip");
+
+        // Edited `os` in snapshot.json (the B6 repro): rejected.
+        let mut edited = json.clone();
+        edited["os"] = "windows".into();
+        let edited: SnapshotManifest = serde_json::from_value(edited).unwrap();
+        assert!(edited.validate().is_err(), "edited os rejected");
+
+        // Edited profile metadata and dropped file entries are covered too.
+        let mut renamed = json.clone();
+        renamed["profile"]["name"] = "Other".into();
+        assert!(serde_json::from_value::<SnapshotManifest>(renamed).unwrap().validate().is_err(), "edited profile rejected");
+        let mut dropped = m.clone();
+        dropped.files.pop();
+        assert!(dropped.validate().is_err(), "dropped file entry rejected");
+
+        // Unknown seal version: rejected.
+        let mut future = m.clone();
+        future.integrity.as_mut().unwrap().version = INTEGRITY_VERSION + 1;
+        assert!(future.validate().is_err(), "unknown seal version");
+
+        // Legacy snapshot (no seal, no integrity key in JSON): accepted as before, even when edited.
+        let legacy = manifest(vec![("a", 1)]);
+        let mut legacy_json = serde_json::to_value(&legacy).unwrap();
+        assert!(legacy_json.get("integrity").is_none(), "unsealed manifest writes no seal");
+        legacy_json["os"] = "windows".into();
+        let legacy: SnapshotManifest = serde_json::from_value(legacy_json).unwrap();
+        assert!(legacy.validate().is_ok(), "legacy accepted");
     }
 
     #[test]

@@ -200,6 +200,10 @@ impl Manager {
                     return Err(e.context("proxy check failed, browser not opened"));
                 }
             };
+            if let Some(why) = proxy_timezone_gap(&profile, Some(&g)) {
+                self.release_relay(pid).await;
+                return Err(CmError::Invalid(why.into()).into());
+            }
             port = Some(p);
             geo = Some(g);
         }
@@ -355,11 +359,18 @@ fn normalize_locale(s: &str) -> Result<String> {
     })
 }
 
+/// Same parser the scheduler uses for schedule timezones (B1): an unknown IANA name is a 400 on
+/// save, not a failure at Start.
 fn check_timezone_format(s: &str) -> Result<()> {
-    let ok = s.len() <= 64
-        && s.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'/' | b'_' | b'-' | b'+'))
-        && (s.contains('/') || matches!(s, "UTC" | "GMT"));
-    if ok { Ok(()) } else { invalid("timezone must be an IANA name such as Europe/Berlin") }
+    crate::scheduler::parse_tz(s).map(|_| ())
+}
+
+/// B2: a proxy was checked but its geo answer has no timezone and the profile sets no override.
+/// Launching then would silently use the host timezone, so the start must be refused.
+pub(crate) fn proxy_timezone_gap(p: &Profile, geo: Option<&ProxyCheck>) -> Option<&'static str> {
+    let g = geo?;
+    (p.settings.timezone.is_none() && g.timezone.trim().is_empty())
+        .then_some("proxy geo answer has no timezone, set a timezone override on the profile")
 }
 
 fn fmt_size((w, h): (u32, u32)) -> String {
@@ -668,8 +679,25 @@ mod tests {
         let bad = |s: ProfileSettings| validate_settings(s, Some((1920, 1080))).is_err();
         assert!(bad(ProfileSettings { window: Some("2000x800".into()), ..Default::default() }), "window larger than screen");
         assert!(bad(ProfileSettings { timezone: Some("Berlin".into()), ..Default::default() }));
+        assert!(bad(ProfileSettings { timezone: Some("Mars/Base".into()), ..Default::default() }), "unknown IANA name (B1)");
+        assert!(!bad(ProfileSettings { timezone: Some("Europe/Berlin".into()), ..Default::default() }));
+        assert!(!bad(ProfileSettings { timezone: Some("UTC".into()), ..Default::default() }));
         assert!(bad(ProfileSettings { start_url: Some("file:///etc/passwd".into()), ..Default::default() }));
         assert!(bad(ProfileSettings { locale: Some("x".into()), ..Default::default() }));
         assert!(!bad(ProfileSettings { screen: Some("2560x1440".into()), window: Some("2400x1300".into()), ..Default::default() }));
+    }
+
+    #[test]
+    fn proxy_without_timezone_fails_closed() {
+        // B2: geo answer with an empty timezone and no override -> refuse (no host-timezone launch)
+        let p = profile(Default::default());
+        assert!(proxy_timezone_gap(&p, Some(&check("", "BR"))).is_some());
+        assert!(proxy_timezone_gap(&p, Some(&check("  ", "BR"))).is_some());
+        // a profile override covers the missing proxy timezone
+        let with_tz = profile(ProfileSettings { timezone: Some("Europe/Berlin".into()), ..Default::default() });
+        assert!(proxy_timezone_gap(&with_tz, Some(&check("", "BR"))).is_none());
+        // a known proxy timezone, or no proxy at all, is not a gap
+        assert!(proxy_timezone_gap(&p, Some(&check("America/Sao_Paulo", "BR"))).is_none());
+        assert!(proxy_timezone_gap(&p, None).is_none());
     }
 }

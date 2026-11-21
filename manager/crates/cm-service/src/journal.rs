@@ -475,6 +475,7 @@ mod tests {
                 proxy: None,
             },
             files: vec![],
+            integrity: None,
         }
     }
 

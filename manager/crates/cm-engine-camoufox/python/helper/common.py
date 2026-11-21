@@ -112,15 +112,73 @@ CANVAS_INIT_JS = r"""(() => {
     try { noisePixels(img.data, img.width, img.height, 4, a[0] | 0, a[1] | 0); } catch (_) {}
     return img;
   } }).getImageData);
-  for (const m of ['toDataURL', 'toBlob']) {
-    defs(HTMLCanvasElement.prototype, m, (orig) => ({ [m](...a) {
-      let t = null;
-      try { t = tmpCanvas(this); } catch (_) {}
-      return orig.apply(t || this, a);
-    } })[m]);
-  }
+  // Deterministic PNG encoder (stored deflate blocks): the native encoder re-applies Camoufox's
+  // per-session noise, so for PNG we encode the seeded-noised pixels ourselves (B3).
+  const crcT = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1); crcT[n] = c >>> 0; }
+  const crc32 = (b, s, e) => { let c = 0xffffffff; for (let i = s; i < e; i++) c = crcT[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const encodePng = (img) => {
+    const w = img.width, h = img.height, px = img.data, stride = w * 4 + 1;
+    const raw = new Uint8Array(stride * h);
+    for (let y = 0; y < h; y++) raw.set(px.subarray(y * w * 4, (y + 1) * w * 4), y * stride + 1);
+    const nb = Math.max(1, Math.ceil(raw.length / 65535));
+    const z = new Uint8Array(2 + raw.length + nb * 5 + 4);
+    let p = 0; z[p++] = 0x78; z[p++] = 0x01;
+    for (let o = 0, i = 0; i < nb; i++, o += 65535) {
+      const n = Math.min(65535, raw.length - o);
+      z[p++] = i === nb - 1 ? 1 : 0; z[p++] = n & 255; z[p++] = n >>> 8; z[p++] = ~n & 255; z[p++] = (~n >>> 8) & 255;
+      z.set(raw.subarray(o, o + n), p); p += n;
+    }
+    let a = 1, b = 0;
+    for (let i = 0; i < raw.length; i++) { a = (a + raw[i]) % 65521; b = (b + a) % 65521; }
+    const ad = ((b << 16) | a) >>> 0;
+    z[p++] = ad >>> 24; z[p++] = (ad >>> 16) & 255; z[p++] = (ad >>> 8) & 255; z[p++] = ad & 255;
+    const out = new Uint8Array(8 + 25 + 12 + z.length + 12);
+    const dv = new DataView(out.buffer);
+    out.set([137, 80, 78, 71, 13, 10, 26, 10]);
+    let q = 8;
+    const chunk = (type, data) => {
+      dv.setUint32(q, data.length); q += 4;
+      for (let i = 0; i < 4; i++) out[q + i] = type.charCodeAt(i);
+      out.set(data, q + 4);
+      dv.setUint32(q + 4 + data.length, crc32(out, q, q + 4 + data.length)); q += 8 + data.length;
+    };
+    const ihdr = new Uint8Array(13), iv = new DataView(ihdr.buffer);
+    iv.setUint32(0, w); iv.setUint32(4, h); ihdr[8] = 8; ihdr[9] = 6;
+    chunk('IHDR', ihdr); chunk('IDAT', z.subarray(0, p)); chunk('IEND', new Uint8Array(0));
+    return out;
+  };
+  const isPng = (t) => t === undefined || t === null || String(t).toLowerCase() === 'image/png' || !/^image\/(jpeg|webp)$/i.test(String(t));
+  const pngBytes = (src) => {
+    const w = src.width, h = src.height;
+    if (!(w > 0 && h > 0) || w * h > 64e6) return null;
+    const t = document.createElement('canvas'); t.width = w; t.height = h;
+    const cx = origGetContext.call(t, '2d');
+    cx.drawImage(src, 0, 0);
+    const img = origGetImageData.call(cx, 0, 0, w, h);
+    noisePixels(img.data, w, h, 4, 0, 0);
+    return encodePng(img);
+  };
+  const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 32768) s += String.fromCharCode.apply(null, u8.subarray(i, i + 32768)); return btoa(s); };
+  defs(HTMLCanvasElement.prototype, 'toDataURL', (orig) => ({ toDataURL(...a) {
+    let u = null;
+    try { if (isPng(a[0])) { const r = pngBytes(this); if (r) u = 'data:image/png;base64,' + b64(r); } } catch (_) {}
+    if (u !== null) return u;
+    let t = null;
+    try { t = tmpCanvas(this); } catch (_) {}
+    return orig.apply(t || this, a);
+  } }).toDataURL);
+  defs(HTMLCanvasElement.prototype, 'toBlob', (orig) => ({ toBlob(...a) {
+    let r = null;
+    try { if (typeof a[0] === 'function' && isPng(a[1])) r = pngBytes(this); } catch (_) {}
+    if (r) { const cb = a[0]; setTimeout(() => cb(new Blob([r], { type: 'image/png' })), 0); return; }
+    let t = null;
+    try { t = tmpCanvas(this); } catch (_) {}
+    return orig.apply(t || this, a);
+  } }).toBlob);
   if (typeof OffscreenCanvas !== 'undefined') {
     defs(OffscreenCanvas.prototype, 'convertToBlob', (orig) => ({ convertToBlob(...a) {
+      try { if (isPng(a[0] && a[0].type)) { const r = pngBytes(this); if (r) return Promise.resolve(new Blob([r], { type: 'image/png' })); } } catch (_) {}
       let t = null;
       try { t = tmpCanvas(this); } catch (_) {}
       return orig.apply(t || this, a);
