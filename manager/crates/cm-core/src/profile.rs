@@ -129,6 +129,36 @@ pub struct Bookmark {
     pub folder: Option<String>,
 }
 
+/// The starter bookmarks a new profile gets (copied from GoLogin's defaults).
+pub fn default_bookmarks() -> Vec<Bookmark> {
+    const ROWS: &[(Option<&str>, &str, &str)] = &[
+        (Some("Facebook"), "Facebook", "https://www.facebook.com/"),
+        (Some("Facebook"), "Notifications", "https://www.facebook.com/settings?tab=notifications"),
+        (Some("Facebook"), "Account Quality", "https://www.facebook.com/accountquality"),
+        (Some("Facebook"), "Ads Manager", "https://www.facebook.com/adsmanager/manage/campaigns"),
+        (Some("Facebook"), "Billing", "https://www.facebook.com/ads/manager/account_settings/account_billing"),
+        (Some("Facebook"), "Business Manager", "https://business.facebook.com/select"),
+        (Some("Dropshipping"), "Amazon", "https://www.amazon.com/"),
+        (Some("Dropshipping"), "eBay", "https://ebay.com/"),
+        (Some("Dropshipping"), "Walmart", "https://walmart.com/"),
+        (Some("Dropshipping"), "Shopify", "https://www.shopify.com/"),
+        (Some("Dropshipping"), "Taobao", "https://taobao.com/"),
+        (Some("Dropshipping"), "Aliexpress", "https://aliexpress.com/"),
+        (Some("Dropshipping"), "PayPal", "https://paypal.com/"),
+        (Some("Dropshipping"), "Payoneer", "https://payoneer.com/"),
+        (Some("Crypto"), "Coinlist", "https://coinlist.co/"),
+        (Some("Crypto"), "Huobi", "https://www.huobi.com/"),
+        (Some("Crypto"), "Discord", "https://discord.com/"),
+        (Some("Crypto"), "Premint", "https://www.premint.xyz/"),
+        (None, "Facebook", "https://www.facebook.com/"),
+        (None, "Amazon", "https://www.amazon.com/"),
+        (None, "TikTok", "https://www.tiktok.com/"),
+        (None, "Google Ads", "https://ads.google.com/"),
+        (None, "Browser check", "https://iphey.com/"),
+    ];
+    ROWS.iter().map(|(f, t, u)| Bookmark { title: (*t).into(), url: (*u).into(), folder: f.map(String::from) }).collect()
+}
+
 /// A stored profile.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -197,6 +227,13 @@ pub fn valid_id(id: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_bookmarks_count() {
+        let d = default_bookmarks();
+        assert_eq!(d.len(), 23);
+        assert_eq!(d.iter().filter(|b| b.folder.is_none()).count(), 5);
+    }
 
     #[test]
     fn os_codes() {

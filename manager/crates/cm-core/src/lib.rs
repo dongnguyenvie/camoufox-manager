@@ -45,7 +45,9 @@ pub use engine::{CrashInfo, Engine, EngineHint, EngineStatus, EngineVersions, In
 pub use error::{CmError, not_implemented};
 pub use notification::{NewNotification, Notification, NotificationRepo};
 pub use org::{Group, GroupRepo, SavedView, SavedViewRepo, Tag, TagRepo};
-pub use profile::{Bookmark, CanvasMode, DataSaving, NewProfile, Os, Profile, ProfileRepo, ProfileSettings, TrashedProfile, WebRtcMode};
+pub use profile::{
+    Bookmark, CanvasMode, DataSaving, NewProfile, Os, Profile, ProfileRepo, ProfileSettings, TrashedProfile, WebRtcMode, default_bookmarks,
+};
 pub use proxy::{NewProxy, Proxy, ProxyCheck, ProxyChecker, ProxyId, ProxyRepo, ProxyScheme};
 pub use schedule::{Preconditions, Recurrence, Schedule, ScheduleAction, ScheduleRepo, ScheduleRun, ScheduleRunOutcome, ScheduleTarget};
 pub use settings::{ApiKeyInfo, ApiKeyRecord, ApiKeyRepo, SettingsRepo};

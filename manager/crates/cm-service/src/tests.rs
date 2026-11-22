@@ -112,6 +112,14 @@ async fn free_port() -> u16 {
 }
 
 #[tokio::test]
+async fn new_profile_has_default_bookmarks() {
+    let (m, _) = manager(false, free_port().await);
+    let v = m.create_profile(NewProfile { name: "b".into(), os: "win".into() }).await.unwrap();
+    assert_eq!(v.settings.bookmarks, cm_core::default_bookmarks());
+    assert_eq!(v.settings.bookmarks.len(), 23);
+}
+
+#[tokio::test]
 async fn start_with_proxy_applies_geo_and_timezone() {
     let (m, engine) = manager(true, free_port().await);
     let p = m.create_profile(NewProfile { name: " Shop ".into(), os: "mac".into() }).await.unwrap();

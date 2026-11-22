@@ -96,6 +96,8 @@ The app manages only that folder. Bookmarks you add by hand in the browser are l
 - If the sync fails (for example the database is locked), the browser still starts and the bookmarks are not
   refreshed that time.
 
+New profiles start with 23 default bookmarks (Facebook, Dropshipping and Crypto folders plus a few loose ones, copied from GoLogin). The list is at `GET /api/bookmarks/defaults`, and the profile form has an **Add defaults** button to add any that are missing.
+
 To import, export your browser's `bookmarks.html` (Netscape format) and send it to
 `POST /api/bookmarks/import`. The response is the parsed list. Nothing is saved until you assign it to a
 profile.
