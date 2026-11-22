@@ -7,12 +7,17 @@ cookies and data. Everything runs on your machine, binds to `127.0.0.1` only, an
 ## Features
 
 - Create and delete profiles. The hardware fingerprint is pinned at creation and kept on every launch.
+- Deleted profiles go to a trash (restore, delete forever, or empty it); retention is configurable, default 7 days.
 - Assign proxies from a proxy library; check IP, country, timezone and coordinates.
 - Start/stop profiles; the Playwright WebSocket endpoint is shown for automation.
 - Geography (timezone, locale, geolocation, WebRTC IP) follows the assigned proxy at each launch.
 - Local fail-closed proxy relay: browsers only see `127.0.0.1:<port>`, credentials stay in the app.
+- Proxy change-IP link: call your provider's rotate URL manually or on each start, then re-check the geography.
 - Cookie import/export; profile transfer (zip export/import, clone, bulk create).
 - Tags, groups, saved views, bulk actions; spreadsheet-style profile table (copy as TSV).
+- Per-profile data saving toggles (passwords, history, cache, site storage) and custom Firefox prefs.
+- Per-profile bookmarks in a managed "Camoufox Manager" folder, with `bookmarks.html` import.
+- Block local network by default: the relay refuses loopback and LAN targets for profiles with a proxy.
 - Templates and browser extensions; scheduled launches; xlsx/csv import and export.
 - Agent leases, a headless `serve` mode, a CLI with an API key, and a doctor report.
 - Device sync between two of your own Macs over Tailscale (see [docs/sync.md](docs/sync.md)).

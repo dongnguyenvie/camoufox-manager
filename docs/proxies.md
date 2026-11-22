@@ -29,3 +29,17 @@ Fail-closed means: if the upstream proxy fails, the connection is closed. The br
 direct connection, so your real IP is not used.
 
 Credentials are kept in the app process. They are not passed to the browser or shown in the UI.
+
+## Change-IP link
+
+A proxy can have a **change-IP link**: a URL that your provider uses to rotate the exit IP. Set it in the
+proxy form (`http` or `https` only, up to 2048 characters). It often contains a token, so treat it as a secret.
+
+- **Change IP** (per proxy row, or `POST /api/proxies/{id}/rotate`) calls the link, then checks the proxy
+  again so the geography follows the new IP. The result shows the new geo, or the error.
+- **Rotate on start** runs the link before each launch of a profile that uses the proxy. It is off by default
+  and only works when a change-IP link is set.
+- The link is called directly, not through the proxy, with a 15-second timeout. Any 2xx answer counts as success.
+- The link is never written to the logs, and error messages do not include it. A failed rotation shows a
+  "Change IP failed" notification.
+- A failed rotation on start does not block the launch. The profile starts on the current IP.
