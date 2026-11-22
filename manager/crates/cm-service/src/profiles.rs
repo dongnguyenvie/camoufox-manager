@@ -4,8 +4,8 @@
 use crate::{Manager, Running, proxies::ProxyView};
 use anyhow::{Context, Result, bail};
 use cm_core::{
-    CanvasMode, CmError, EngineHint, LaunchOptions, MachineSummary, NewProfile, Os, Profile, ProfileSettings, ProxyCheck, ProxyId,
-    WebRtcMode,
+    CanvasMode, CmError, DataSaving, EngineHint, LaunchOptions, MachineSummary, NewProfile, Os, Profile, ProfileSettings, ProxyCheck,
+    ProxyId, WebRtcMode, engine::StorageFlags,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::Path, path::PathBuf};
@@ -638,6 +638,11 @@ pub(crate) fn launch_options_for(p: &Profile, geo: Option<&ProxyCheck>, port: Op
     o
 }
 
+/// What the profile keeps between runs, from its DataSaving. Session cookies are always kept.
+pub(crate) fn storage_flags(d: &DataSaving) -> StorageFlags {
+    StorageFlags { session: true, local: d.site_storage, history: d.history, passwords: d.passwords }
+}
+
 fn webrtc_code(m: WebRtcMode) -> &'static str {
     match m {
         WebRtcMode::Replace => "replace",
@@ -660,6 +665,7 @@ impl Manager {
         fp.noise.webgl = Some(canvas.into());
         fp.noise.audio = Some("native".into());
         fp.webrtc = Some(webrtc_code(p.settings.webrtc).into());
+        fp.storage = Some(storage_flags(&p.settings.data));
         fp
     }
 
@@ -765,6 +771,19 @@ mod tests {
             machine: serde_json::json!({}),
             settings,
         }
+    }
+
+    #[test]
+    fn storage_flags_follow_data_saving() {
+        let all_on = storage_flags(&DataSaving::default());
+        assert!(all_on.session && all_on.local && all_on.history && all_on.passwords);
+        let off = DataSaving { passwords: false, history: false, cache: false, site_storage: false };
+        let f = storage_flags(&off);
+        assert!(f.session, "cookies are never cleared");
+        assert!(!f.local && !f.history && !f.passwords);
+        // cache has no summary column
+        let cache_only = storage_flags(&DataSaving { cache: false, ..Default::default() });
+        assert!(cache_only.local && cache_only.history && cache_only.passwords);
     }
 
     #[test]

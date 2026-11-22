@@ -1,10 +1,7 @@
 //! Pinned machine = the Camoufox config generated once (`navigator.*`, `screen.*`, `webGl:*`,
 //! `fonts`, …). This module reads it for the UI. Phase 4 owns it (pinning details); CM-1.20 owns the canvas modes.
 
-use cm_core::{
-    LaunchOptions, WebRtcMode,
-    engine::{MachineSummary, StorageFlags},
-};
+use cm_core::{LaunchOptions, WebRtcMode, engine::MachineSummary};
 use serde_json::Value;
 use std::collections::BTreeMap;
 use tokio::process::Command;
@@ -150,8 +147,8 @@ pub fn summarize(c: &Value) -> MachineSummary {
         noise: Default::default(),
         webrtc: None,
         fonts: c.get("fonts").and_then(Value::as_array).map(Vec::len),
-        // A persistent Firefox profile keeps everything in user-data.
-        storage: Some(StorageFlags { session: true, local: true, history: true, passwords: true }),
+        // The engine does not know the profile's DataSaving; the service fills this in.
+        storage: None,
     }
 }
 
