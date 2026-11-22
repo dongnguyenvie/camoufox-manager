@@ -27,7 +27,7 @@ pub use diag::{HelperState, Orphan, find_orphans, helper_state};
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use cm_core::{
-    CmError, CrashInfo, Engine, EngineHint, EngineStatus, EngineVersions, LaunchOptions, MachineSummary, Os, Profile, Session,
+    CmError, CrashInfo, Engine, EngineHint, EngineStatus, EngineVersions, InstallInfo, LaunchOptions, MachineSummary, Os, Profile, Session,
     cookies::{Cookie, CookieFormat, CookieImportMode},
     profile::valid_id,
 };
@@ -171,6 +171,14 @@ impl Engine for Camoufox {
         *self.check.lock().await = None;
         *self.versions.lock().await = None;
         r
+    }
+
+    fn install_info(&self) -> Option<InstallInfo> {
+        Some(InstallInfo {
+            uv_path: version::find_uv().map(|p| p.display().to_string()),
+            venv_python: self.python.display().to_string(),
+            camoufox_version: version::CAMOUFOX_VERSION.to_string(),
+        })
     }
 
     async fn generate(&self, os: Os) -> Result<Value> {

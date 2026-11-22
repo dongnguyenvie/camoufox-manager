@@ -70,7 +70,7 @@ fn uv_dirs(exe_dir: Option<PathBuf>, path: Option<std::ffi::OsString>, home: &Pa
 
 /// Locate `uv`: `CAMOUFOX_UV` (explicit path) first, then the copy next to the running executable
 /// (bundled in the packaged app), then PATH and the usual install folders (a GUI app has a short PATH).
-fn find_uv() -> Option<PathBuf> {
+pub(crate) fn find_uv() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("CAMOUFOX_UV").map(PathBuf::from).filter(|p| p.is_file()) {
         return Some(p);
     }

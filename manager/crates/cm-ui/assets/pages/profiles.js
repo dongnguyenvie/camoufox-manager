@@ -22,6 +22,10 @@ I18N.add({
     'profiles.engineError': 'Could not read profiles, showing the last data.',
     'profiles.engineNotReadyTitle': '{name} not ready',
     'profiles.engineNotReadyBody': 'creating and starting profiles is disabled.',
+    'profiles.engineInstall': 'Install {name}',
+    'profiles.engineInstalling': 'Installing {name}…',
+    'profiles.engineViewLog': 'View log',
+    'profiles.engineDetails': 'Details',
     'profiles.noMatch': 'No profile matches',
     'profiles.selectRow': 'Select the whole row',
     'profiles.stopFirst': 'Stop the profile before changing its proxy',
@@ -99,6 +103,10 @@ I18N.add({
     'profiles.engineError': 'Không đọc được danh sách profile, đang hiện dữ liệu gần nhất.',
     'profiles.engineNotReadyTitle': '{name} chưa sẵn sàng',
     'profiles.engineNotReadyBody': 'tạo/mở profile đang tắt.',
+    'profiles.engineInstall': 'Cài {name}',
+    'profiles.engineInstalling': 'Đang cài {name}…',
+    'profiles.engineViewLog': 'Xem nhật ký',
+    'profiles.engineDetails': 'Chi tiết',
     'profiles.noMatch': 'Không có profile nào khớp',
     'profiles.selectRow': 'Chọn cả hàng',
     'profiles.stopFirst': 'Stop trước khi đổi proxy',
@@ -261,6 +269,10 @@ CM.pages.profiles = {
     const raw = (c, p) => String(c.v(p));
     const head = c => c.hf ? c.hf(o.value) : c.raw ? c.h : (c.h ? t(c.h) : '');
     const hint = computed(() => fmt.engineHint(o.value));
+    const hintDetail = computed(() => fmt.engineDetail(o.value));
+    // Settings starts the install on arrival (#/settings/install); while one runs, just open its log.
+    const goInstall = () => { location.hash = '#/settings/install'; };
+    const goLog = () => { location.hash = '#/settings'; };
 
     const view = computed(() => {
       if (!o.value) return [];
@@ -411,7 +423,7 @@ CM.pages.profiles = {
     });
 
     return {
-      xfer, tplx, ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, dlg, del, edit, editing, cookies, cookiesFor, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
+      xfer, tplx, ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, hintDetail, goInstall, goLog, dlg, del, edit, editing, cookies, cookiesFor, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
       runCount, view, raw, orgx, manage, load, cellState, selectRow, down, over, dbl, onKey, copyAll, refresh, act, reveal, fmt,
     };
   },
@@ -441,7 +453,12 @@ CM.pages.profiles = {
 
     <!-- Engine not installed (Camoufox is optional) -->
     <div v-if="o && !o.providerAvailable && o.providerHint" class="banner">
-      <cm-icon name="alert"/><div><b>{{ t('profiles.engineNotReadyTitle', { name: pn }) }}</b> — {{ t('profiles.engineNotReadyBody') }}<br><span class="opacity-85">{{ hint }}</span></div>
+      <cm-icon name="alert"/><div class="flex-1 min-w-0">
+        <b>{{ t('profiles.engineNotReadyTitle', { name: pn }) }}</b> — {{ t('profiles.engineNotReadyBody') }}<br><span class="opacity-85">{{ hint }}</span>
+        <details v-if="hintDetail" class="mt-1"><summary class="cursor-pointer text-xs">{{ t('profiles.engineDetails') }}</summary><code class="text-xs break-all">{{ hintDetail }}</code></details>
+      </div>
+      <button v-if="o.providerInstalling" class="btn" @click="goLog"><i class="spin"></i>{{ t('profiles.engineInstalling', { name: pn }) }} · {{ t('profiles.engineViewLog') }}</button>
+      <button v-else class="btn btn-start" @click="goInstall">{{ t('profiles.engineInstall', { name: pn }) }}</button>
     </div>
     <div v-if="o && o.apiError" class="banner">
       <cm-icon name="alert"/><div><b>{{ t('profiles.engineError') }}</b><br><span class="opacity-85">{{ o.apiError }}</span></div>

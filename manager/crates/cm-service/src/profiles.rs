@@ -58,6 +58,8 @@ pub struct Overview {
     /// Engine can launch; false + `provider_hint` when not installed (Camoufox is optional).
     pub provider_available: bool,
     pub provider_hint: Option<EngineHint>,
+    /// An engine install / update is running (the UI links to its log instead of offering it again).
+    pub provider_installing: bool,
     /// Protocol of the ws URL returned by start (`Playwright`).
     pub ws_protocol: &'static str,
     pub proxy_count: usize,
@@ -161,6 +163,7 @@ impl Manager {
             provider: self.d.engine.name(),
             provider_available: status.ready,
             provider_hint: status.hint,
+            provider_installing: crate::settings::install_running(),
             ws_protocol: self.d.engine.ws_protocol(),
             proxy_count: proxies.len(),
             api_error,

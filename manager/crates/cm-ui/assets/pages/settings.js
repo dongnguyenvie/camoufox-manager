@@ -17,9 +17,19 @@ I18N.add({
     'settings.unknown': 'unknown',
     'settings.install': 'Install / Update Camoufox',
     'settings.installing': 'Installing…',
-    'settings.installHint': 'Optional. Downloads about 2.4 GB (browser + fonts) and needs the uv tool. The app works without it, you just cannot launch profiles.',
+    'settings.installHint': 'Optional. Downloads about 2.4 GB (browser + fonts). The app keeps working without it; only launching profiles needs it.',
     'settings.installLog': 'Install log',
     'settings.installDone': 'Camoufox is installed',
+    'settings.installDoneBody': 'Done. You can launch profiles now.',
+    'settings.installFailedTitle': 'The install did not finish',
+    'settings.retry': 'Retry',
+    'settings.copyLog': 'Copy log',
+    'settings.manual': 'Manual install',
+    'settings.manualIntro': 'Run these in Terminal, in order, then reopen this page. They use the same tools and folder as the app.',
+    'settings.manualVenv': '1. Create the Python environment (skip if it already exists)',
+    'settings.manualPkg': '2. Install the Camoufox package',
+    'settings.manualFetch': '3. Download the browser',
+    'settings.uvMissing': 'uv was not found on this machine. Install it first:',
     'settings.installFailed': 'Install failed: {msg}',
     'settings.keys': 'API keys',
     'settings.keysIntro': 'One key per agent or machine, sent as the X-API-Key header (the CLI reads CM_API_KEY). This window never needs a key.',
@@ -63,9 +73,19 @@ I18N.add({
     'settings.unknown': 'không rõ',
     'settings.install': 'Cài / Cập nhật Camoufox',
     'settings.installing': 'Đang cài…',
-    'settings.installHint': 'Không bắt buộc. Tải khoảng 2,4 GB (trình duyệt + font) và cần công cụ uv. App vẫn chạy khi chưa cài, chỉ là chưa mở được profile.',
+    'settings.installHint': 'Không bắt buộc. Tải khoảng 2,4 GB (trình duyệt + font). App vẫn chạy bình thường khi chưa cài, chỉ việc mở profile mới cần đến nó.',
     'settings.installLog': 'Nhật ký cài đặt',
     'settings.installDone': 'Đã cài xong Camoufox',
+    'settings.installDoneBody': 'Xong rồi. Bạn có thể mở profile ngay.',
+    'settings.installFailedTitle': 'Cài đặt chưa hoàn tất',
+    'settings.retry': 'Thử lại',
+    'settings.copyLog': 'Copy log',
+    'settings.manual': 'Cài thủ công',
+    'settings.manualIntro': 'Chạy lần lượt các lệnh này trong Terminal rồi mở lại trang này. Chúng dùng cùng công cụ và thư mục với app.',
+    'settings.manualVenv': '1. Tạo môi trường Python (bỏ qua nếu đã có)',
+    'settings.manualPkg': '2. Cài gói Camoufox',
+    'settings.manualFetch': '3. Tải trình duyệt',
+    'settings.uvMissing': 'Không tìm thấy uv trên máy này. Hãy cài uv trước:',
     'settings.installFailed': 'Cài đặt lỗi: {msg}',
     'settings.keys': 'API key',
     'settings.keysIntro': 'Mỗi agent hoặc máy một key, gửi trong header X-API-Key (CLI đọc CM_API_KEY). Cửa sổ này không bao giờ cần key.',
@@ -101,7 +121,8 @@ CM.pages.settings = {
   setup() {
     const s = Vue.ref(null);
     const keys = Vue.ref([]);
-    const log = Vue.reactive({ lines: [], next: 0, running: false, open: false });
+    const log = Vue.reactive({ lines: [], next: 0, running: false, open: false, ok: null, error: null });
+    const copied = Vue.ref('');
     const logEl = Vue.ref(null);
     const newKey = Vue.reactive({ name: '', busy: false, secret: null, copied: false });
     const revoke = Vue.reactive({ open: false, key: null, busy: false });
@@ -126,6 +147,7 @@ CM.pages.settings = {
         log.lines.push(...r.lines);
         log.next = r.next;
         log.running = r.running;
+        log.ok = r.ok; log.error = r.error;
         await Vue.nextTick();
         if (logEl.value) logEl.value.scrollTop = logEl.value.scrollHeight;
         if (r.running) { timer = setTimeout(poll, 700); return; }
@@ -137,10 +159,37 @@ CM.pages.settings = {
     const install = async () => {
       try {
         await api('/api/engine/install', { method: 'POST', body: '{}' });
-        Object.assign(log, { lines: [], next: 0, running: true, open: true });
-        poll();
-      } catch (e) { toast(e.message, true); }
+      } catch (e) {
+        // 409: one is already running (e.g. started from the Profiles banner): just follow its log.
+        if (e.status !== 409) { toast(e.message, true); return; }
+      }
+      if (timer) { clearTimeout(timer); timer = null; }
+      Object.assign(log, { lines: [], next: 0, running: true, open: true, ok: null, error: null });
+      poll();
     };
+
+    /* ---- copy helpers (log + manual commands) ---- */
+    const copyText = async (text, key) => {
+      try { await navigator.clipboard.writeText(text); copied.value = key; toast(t('common.copied')); }
+      catch (_) { /* clipboard blocked: the text stays selectable on the page */ }
+    };
+    const sh = v => "'" + String(v).replace(/'/g, "'\\''") + "'";
+    const manual = Vue.computed(() => {
+      const e = s.value && s.value.engine;
+      // Same rule as the server-side install: only a `<venv>/bin/python` can be (re)created.
+      if (!e || !e.venvPython || !/\/bin\/python$/.test(e.venvPython)) return null;
+      const venv = e.venvPython.replace(/\/bin\/python$/, '');
+      const uv = e.uvPath;
+      const pkg = 'camoufox==' + e.camoufoxVersion;
+      return {
+        uv: !!uv,
+        steps: uv ? [
+          { k: 'venv', label: t('settings.manualVenv'), cmd: sh(uv) + ' venv --python 3.12 ' + sh(venv) },
+          { k: 'pkg', label: t('settings.manualPkg'), cmd: sh(uv) + ' pip install --python ' + sh(e.venvPython) + ' ' + pkg },
+          { k: 'fetch', label: t('settings.manualFetch'), cmd: sh(e.venvPython) + ' -m camoufox fetch' },
+        ] : [],
+      };
+    });
 
     /* ---- API keys ---- */
     const createKey = async () => {
@@ -168,7 +217,11 @@ CM.pages.settings = {
 
     Vue.onMounted(async () => {
       await Promise.all([load(), loadKeys()]);
+      // Arrived from the Profiles banner (#/settings/install): start now, then drop the flag so a reload does not repeat it.
+      const auto = location.hash === '#/settings/install';
+      if (auto) history.replaceState(null, '', '#/settings');
       if (s.value && s.value.engine.installRunning) { log.open = true; log.running = true; poll(); }
+      else if (auto && s.value && !s.value.engine.ready) install();
     });
     Vue.onUnmounted(() => { if (timer) clearTimeout(timer); });
 
@@ -184,7 +237,7 @@ CM.pages.settings = {
     const hasActiveKey = Vue.computed(() => keys.value.some(k => !k.revokedAt));
 
     return {
-      s, keys, log, logEl, newKey, revoke, state, hasActiveKey, when,
+      s, keys, log, logEl, copied, manual, copyText, newKey, revoke, state, hasActiveKey, when,
       LANGS: I18N.LANGS, locale: I18N.locale, setLanguage: CM.setLanguage,
       patch, install, createKey, copyKey, doRevoke, reveal,
     };
@@ -226,8 +279,29 @@ CM.pages.settings = {
             </div>
           </div>
         </div>
+        <div v-if="log.ok === true" class="banner" style="margin-top:10px"><cm-icon name="check"/><div><b>{{ t('settings.installDone') }}</b> — {{ t('settings.installDoneBody') }}</div></div>
+        <div v-if="log.ok === false" class="banner" style="margin-top:10px">
+          <cm-icon name="alert"/>
+          <div class="flex-1 min-w-0"><b>{{ t('settings.installFailedTitle') }}</b><br><span class="opacity-85 break-all">{{ log.error }}</span></div>
+          <button class="btn btn-start" :disabled="log.running" @click="install">{{ t('settings.retry') }}</button>
+        </div>
+        <details v-if="log.ok === false && manual" style="margin-top:10px">
+          <summary class="cursor-pointer text-[13px]">{{ t('settings.manual') }}</summary>
+          <p class="m-0 text-xs text-faint" style="margin:6px 0">{{ t('settings.manualIntro') }}</p>
+          <p v-if="!manual.uv" class="m-0 text-xs text-bad">{{ t('settings.uvMissing') }} <a href="https://docs.astral.sh/uv/" target="_blank" rel="noopener">https://docs.astral.sh/uv/</a></p>
+          <div v-for="st in manual.steps" :key="st.k" class="flex flex-col gap-1" style="margin-bottom:8px">
+            <span class="text-xs text-faint">{{ st.label }}</span>
+            <div class="flex items-start gap-2">
+              <code class="break-all flex-1 min-w-0 p-2 rounded-lg border border-line bg-panel2 text-[12px]" style="user-select:all">{{ st.cmd }}</code>
+              <button class="btn" @click="copyText(st.cmd, st.k)"><cm-icon :name="copied === st.k ? 'check' : 'copy'" :size="14"/> {{ t('settings.copy') }}</button>
+            </div>
+          </div>
+        </details>
         <div v-if="log.open" class="flex flex-col gap-1" style="margin-top:10px">
-          <span class="text-xs text-faint">{{ t('settings.installLog') }}</span>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-faint flex-1">{{ t('settings.installLog') }}</span>
+            <button v-if="log.lines.length" class="btn" @click="copyText(log.lines.join('\\n'), 'log')"><cm-icon :name="copied === 'log' ? 'check' : 'copy'" :size="14"/> {{ t('settings.copyLog') }}</button>
+          </div>
           <pre ref="logEl" class="m-0 p-3 rounded-lg border border-line bg-panel2 font-mono text-[12px] overflow-auto max-h-[260px]" style="white-space:pre-wrap;word-break:break-all">{{ log.lines.join('\\n') }}</pre>
         </div>
       </section>

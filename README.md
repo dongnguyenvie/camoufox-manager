@@ -27,7 +27,9 @@ cookies and data. Everything runs on your machine, binds to `127.0.0.1` only, an
 ## Install Camoufox (optional)
 
 Camoufox is not required to build or open the app. Without it the app starts, reports that the engine
-is not installed, and disables the create and start actions. To install it:
+is not installed, and disables the create and start actions. In the packaged app, the Profiles page then
+shows an **Install Camoufox** button that opens Settings and starts the install right away (live log, Retry,
+Copy log and manual commands if it fails). When running from source, use the setup script:
 
 ```bash
 manager/camoufox/setup.sh

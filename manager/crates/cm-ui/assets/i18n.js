@@ -67,7 +67,7 @@ I18N.add({
     'engine.hint.not_installed': '{name} is not installed',
     'engine.hint.browser_missing': 'The {name} browser is not downloaded',
     'engine.hint.error': '{name} reported an error',
-    'engine.setup': 'Run manager/camoufox/setup.sh, then reopen the app.',
+    'engine.setup': 'Install it from Settings (about 2.4 GB download).',
   },
   vi: {
     'app.name': 'Camoufox Manager',
@@ -100,7 +100,7 @@ I18N.add({
     'engine.hint.not_installed': '{name} chưa được cài',
     'engine.hint.browser_missing': 'Chưa tải trình duyệt {name}',
     'engine.hint.error': '{name} báo lỗi',
-    'engine.setup': 'Chạy manager/camoufox/setup.sh rồi mở lại app.',
+    'engine.setup': 'Cài từ Cài đặt (tải khoảng 2,4 GB).',
   },
 });
 
@@ -119,6 +119,8 @@ const fmt = {
   /* Engine hint → translated sentence + detail. */
   engineHint(o) {
     const h = o?.providerHint; if (!h) return '';
-    return t('engine.hint.' + h.code, { name: o.provider }) + ' — ' + t('engine.setup') + (h.detail ? ' (' + h.detail + ')' : '');
+    return t('engine.hint.' + h.code, { name: o.provider }) + ' — ' + t('engine.setup');
   },
+  /* Raw technical detail behind the hint (shown only on demand, never in tooltips). */
+  engineDetail: o => o?.providerHint?.detail || '',
 };

@@ -29,6 +29,9 @@ pub struct EngineInfo {
     pub version: Option<String>,
     pub versions: Option<EngineVersions>,
     pub install_running: bool,
+    /// Paths/version for manual install steps (`None` when the engine cannot install).
+    #[serde(flatten)]
+    pub install: Option<cm_core::InstallInfo>,
 }
 
 #[derive(Serialize)]
@@ -115,6 +118,11 @@ fn job() -> &'static Mutex<Job> {
     JOB.get_or_init(Default::default)
 }
 
+/// An engine install is running right now (also exposed on the overview).
+pub(crate) fn install_running() -> bool {
+    job().lock().unwrap_or_else(|e| e.into_inner()).running
+}
+
 fn push_line(line: String) {
     let mut j = job().lock().unwrap_or_else(|e| e.into_inner());
     j.lines.push(line);
@@ -172,7 +180,8 @@ impl Manager {
                 hint: status.hint,
                 version: status.version,
                 versions,
-                install_running: job().lock().unwrap_or_else(|e| e.into_inner()).running,
+                install_running: install_running(),
+                install: self.d.engine.install_info(),
             },
         }
     }

@@ -41,6 +41,18 @@ pub struct EngineVersions {
     pub browser: Option<String>,
 }
 
+/// Where the install lands and how to repeat it by hand (shown when the in-app install fails).
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallInfo {
+    /// Package manager binary the install uses (`uv`); `None` when it cannot be found.
+    pub uv_path: Option<String>,
+    /// `<venv>/bin/python` the engine runs from.
+    pub venv_python: String,
+    /// Pinned package version the install requests.
+    pub camoufox_version: String,
+}
+
 /// Settings applied for one launch. `None` = let the engine decide.
 #[derive(Clone, Debug, Default)]
 pub struct LaunchOptions {
@@ -142,6 +154,11 @@ pub trait Engine: Send + Sync {
     /// Install or update the engine, reporting every output line to `log` (phase 12). Optional.
     async fn install(&self, _log: &(dyn Fn(String) + Send + Sync)) -> Result<()> {
         Err(not_implemented("engine install"))
+    }
+
+    /// Paths and version behind [`Engine::install`], for manual-install instructions.
+    fn install_info(&self) -> Option<InstallInfo> {
+        None
     }
 
     /// Generate a new pinned machine for `os` (the opaque value stored in [`Profile::machine`]).

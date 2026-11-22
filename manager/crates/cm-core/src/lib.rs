@@ -41,7 +41,7 @@ pub mod transfer;
 
 pub use clock::{Clock, SystemClock};
 pub use device::{Device, DeviceRepo};
-pub use engine::{CrashInfo, Engine, EngineHint, EngineStatus, EngineVersions, LaunchOptions, MachineSummary, Session};
+pub use engine::{CrashInfo, Engine, EngineHint, EngineStatus, EngineVersions, InstallInfo, LaunchOptions, MachineSummary, Session};
 pub use error::{CmError, not_implemented};
 pub use notification::{NewNotification, Notification, NotificationRepo};
 pub use org::{Group, GroupRepo, SavedView, SavedViewRepo, Tag, TagRepo};
