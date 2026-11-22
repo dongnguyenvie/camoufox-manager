@@ -89,6 +89,9 @@ async def cmd_launch(args):
         cfg["webrtc:ipv4"] = args.ip
     if args.proxy:
         opts["proxy"] = {"server": args.proxy}
+    else:
+        opts.pop("proxy", None)
+    if args.proxy and not args.direct_proxy:
         # replace / none: no separate WebRTC path (direct UDP) when a proxy is set.
         # real: leave UDP direct so the real IP shows. forward: Firefox defaults untouched.
         if mode in ("replace", "none"):
@@ -96,7 +99,8 @@ async def cmd_launch(args):
         elif mode == "real":
             prefs["media.peerconnection.ice.proxy_only_if_behind_proxy"] = False
     else:
-        opts.pop("proxy", None)
+        # No proxy, or only the app's direct relay (local-network blocking): WebRTC behaves as
+        # without a proxy and must not be tied to the relay.
         if mode != "forward":
             prefs["media.peerconnection.ice.proxy_only_if_behind_proxy"] = False
     if args.prefs:

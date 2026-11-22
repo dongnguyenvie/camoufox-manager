@@ -58,6 +58,9 @@ pub struct InstallInfo {
 pub struct LaunchOptions {
     /// Local, auth-less HTTP proxy (always `127.0.0.1:port` opened by the app).
     pub proxy: Option<(String, u16)>,
+    /// `proxy` is the app's no-upstream relay (profile without a proxy, local network blocked):
+    /// WebRTC and geography behave as without a proxy.
+    pub direct_proxy: bool,
     pub timezone: Option<String>,
     /// (latitude, longitude). Never set without `timezone` (D4).
     pub geolocation: Option<(f64, f64)>,

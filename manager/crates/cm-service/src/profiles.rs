@@ -131,10 +131,7 @@ impl Manager {
         let ids: Vec<String> = self.running.lock().await.keys().cloned().collect();
         for id in ids {
             if self.d.engine.alive(&id).await == Some(false) {
-                let proxy = self.running.lock().await.remove(&id).and_then(|r| r.proxy);
-                if let Some(px) = proxy {
-                    self.release_relay(px).await;
-                }
+                self.forget_running(&id).await;
                 println!("{id} exited on its own");
                 self.notify_crash_of(&id).await;
             }
@@ -214,6 +211,8 @@ impl Manager {
             bail!("{} is not ready: {why}", self.d.engine.name());
         }
         let (mut port, mut geo) = (None, None);
+        let block_local = profile.settings.block_local_network.unwrap_or(true);
+        let mut direct: Option<(u16, tokio::task::JoinHandle<()>)> = None;
         if let Some(pid) = profile.proxy_id {
             // Relay up and geo known BEFORE the browser opens: dead proxy → no browser (fail-closed).
             let proxy = self.proxy(pid).await?;
@@ -233,14 +232,27 @@ impl Manager {
             port = Some(p);
             geo = Some(g);
         }
+        if profile.proxy_id.is_none() && block_local {
+            // No proxy: the browser still goes through a local relay (no upstream) so local-network
+            // targets can be refused. Geo / WebRTC stay as for a direct launch.
+            let listener = cm_relay::bind(0).await?;
+            direct = Some((listener.local_addr()?.port(), tokio::spawn(cm_relay::run_direct(listener))));
+        }
         // Proxy-derived geography is the default, the profile's overrides win (D4).
         let mut opts = launch_options_for(&profile, geo.as_ref(), port);
+        if let Some((dp, _)) = &direct {
+            opts.proxy = Some(("127.0.0.1".to_string(), *dp));
+            opts.direct_proxy = true;
+        }
         opts.extensions = self.extension_files(id).await; // CM-1.9: assigned Firefox extensions
         // Settings page default (phase 12); unset = the engine's own default (CAMOUFOX_HEADLESS).
         opts.headless = self.headless_default().await;
         let session = match self.d.engine.launch(&profile, &opts).await {
             Ok(s) => s,
             Err(e) => {
+                if let Some((_, h)) = &direct {
+                    h.abort();
+                }
                 if let Some(pid) = profile.proxy_id {
                     self.release_relay(pid).await;
                 }
@@ -255,7 +267,8 @@ impl Manager {
                 proxy: profile.proxy_id,
                 port,
                 started_at: now,
-                block_local: profile.settings.block_local_network.unwrap_or(true),
+                block_local,
+                direct_relay: direct.map(|(_, h)| h),
             },
         );
         let _ = self.d.profiles.touch(id, &cm_core::clock::iso(now)).await;
@@ -265,11 +278,19 @@ impl Manager {
     pub async fn stop(&self, id: &str) -> Result<()> {
         let _ = self.lease_release(id, None).await; // phase 8: stopping ends the lease
         self.d.engine.stop(id).await?;
-        let proxy = self.running.lock().await.remove(id).and_then(|r| r.proxy);
-        if let Some(px) = proxy {
+        self.forget_running(id).await;
+        Ok(())
+    }
+
+    /// Drop the record of a stopped or crashed browser and shut down the relay it used.
+    async fn forget_running(&self, id: &str) {
+        let Some(r) = self.running.lock().await.remove(id) else { return };
+        if let Some(h) = r.direct_relay {
+            h.abort();
+        }
+        if let Some(px) = r.proxy {
             self.release_relay(px).await;
         }
-        Ok(())
     }
 
     /// Stop every running profile so the engine closes browsers cleanly (app exit).
