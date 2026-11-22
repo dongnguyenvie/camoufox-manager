@@ -18,6 +18,8 @@
 //! | `0009_notifications.sql` | 19 Notifications (bell) |
 //! | `0010_devices.sql` | 16 Paired devices (sync) |
 //! | `0011_sync_state.sql` | 17 Per-profile per-peer sync state |
+//! | `0012_trash.sql` | CM-3.1 Trash (soft delete) |
+//! | `0013_proxy_rotate.sql` | CM-3.2 Proxy change-IP link |
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
@@ -47,6 +49,8 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(9, "0009_notifications.sql"),
     migration!(10, "0010_devices.sql"),
     migration!(11, "0011_sync_state.sql"),
+    migration!(12, "0012_trash.sql"),
+    migration!(13, "0013_proxy_rotate.sql"),
 ];
 
 /// Only comments / whitespace?

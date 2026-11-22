@@ -84,6 +84,45 @@ pub struct ProfileSettings {
     /// Page opened on start.
     pub start_url: Option<String>,
     pub humanize: Option<bool>,
+    /// What the browser keeps between launches (CM-3.3). Default: keep everything.
+    pub data: DataSaving,
+    /// Extra Firefox prefs set at every launch (CM-3.3), applied after ours; values are
+    /// bool / number / string. Keys the engine owns (proxy, fingerprint) are rejected on save.
+    pub custom_prefs: std::collections::BTreeMap<String, Value>,
+    /// Bookmarks kept in a "Camoufox Manager" folder on the toolbar (CM-3.4), written while the
+    /// profile is closed.
+    pub bookmarks: Vec<Bookmark>,
+    /// Block pages from reaching localhost / private networks (port scans) (CM-3.6).
+    /// `None` = on.
+    pub block_local_network: Option<bool>,
+}
+
+/// Per-profile data saving toggles (CM-3.3). `true` = keep between launches.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct DataSaving {
+    pub passwords: bool,
+    pub history: bool,
+    pub bookmarks: bool,
+    /// localStorage / IndexedDB / service workers.
+    pub site_storage: bool,
+    pub cache: bool,
+}
+
+impl Default for DataSaving {
+    fn default() -> Self {
+        DataSaving { passwords: true, history: true, bookmarks: true, site_storage: true, cache: true }
+    }
+}
+
+/// One managed bookmark (CM-3.4).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Bookmark {
+    pub title: String,
+    pub url: String,
+    /// Optional sub-folder inside the managed folder.
+    pub folder: Option<String>,
 }
 
 /// A stored profile.

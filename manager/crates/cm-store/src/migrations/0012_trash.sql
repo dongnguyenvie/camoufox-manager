@@ -1,0 +1,2 @@
+-- 0012_trash — CM-3.1 (Trash): soft-delete column on profiles.
+-- Reserved (comments only = skipped, not recorded) until phase CM-3.1 fills it.
