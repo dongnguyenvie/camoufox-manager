@@ -54,6 +54,27 @@ I18N.add({
     'profiles.created': 'Created profile {name}',
     'profiles.deleteTitle': 'Delete profile “{name}”?',
     'profiles.deleteBody': 'Its fingerprint and all browser data (cookies, logins, history) are removed from this machine and cannot be recovered.',
+    'profiles.deleteBodyTrash': 'It moves to the Trash and is deleted for good after {days} days. Until then you can restore it with all its data.',
+    'profiles.trash': 'Trash',
+    'profiles.trashTitle': 'Deleted profiles that can still be restored',
+    'profiles.trashCount': 'Trash ({n})',
+    'profiles.trashEmpty': 'The trash is empty.',
+    'profiles.trashInfo': 'Deleted profiles stay here for {days} days, then are removed for good.',
+    'profiles.trashOff': 'The trash is off: deleted profiles are removed at once.',
+    'profiles.trashDays': 'Keep for (days, 0 = off)',
+    'profiles.trashDeleted': 'deleted {ago}',
+    'profiles.trashLeft': '{n} d left',
+    'profiles.trashLeftSoon': 'less than a day left',
+    'profiles.restore': 'Restore',
+    'profiles.restored': 'Restored {name}',
+    'profiles.purge': 'Delete forever',
+    'profiles.purgeTitle': 'Delete “{name}” forever?',
+    'profiles.purgeBody': 'Its fingerprint and all browser data are removed from this machine and cannot be recovered.',
+    'profiles.purged': 'Deleted {name} forever',
+    'profiles.emptyTrash': 'Empty trash',
+    'profiles.emptyTrashTitle': 'Empty the trash?',
+    'profiles.emptyTrashBody': 'All {n} profiles in the trash are deleted forever, with their data. This cannot be undone.',
+    'profiles.emptied': 'Trash emptied',
     'profiles.deleteRunning': 'The running profile is stopped first.',
     'profiles.deleting': 'Deleting…',
     'profiles.deleted': 'Deleted {name}',
@@ -134,6 +155,27 @@ I18N.add({
     'profiles.creating': 'Đang tạo…',
     'profiles.created': 'Đã tạo profile {name}',
     'profiles.deleteTitle': 'Xoá profile “{name}”?',
+    'profiles.deleteBodyTrash': 'Profile được chuyển vào Thùng rác và xoá hẳn sau {days} ngày. Trong thời gian đó bạn có thể khôi phục cùng toàn bộ dữ liệu.',
+    'profiles.trash': 'Thùng rác',
+    'profiles.trashTitle': 'Các profile đã xoá vẫn còn khôi phục được',
+    'profiles.trashCount': 'Thùng rác ({n})',
+    'profiles.trashEmpty': 'Thùng rác trống.',
+    'profiles.trashInfo': 'Profile đã xoá được giữ ở đây {days} ngày rồi xoá hẳn.',
+    'profiles.trashOff': 'Thùng rác đang tắt: profile bị xoá ngay khi xoá.',
+    'profiles.trashDays': 'Giữ trong (ngày, 0 = tắt)',
+    'profiles.trashDeleted': 'xoá {ago}',
+    'profiles.trashLeft': 'còn {n} ngày',
+    'profiles.trashLeftSoon': 'còn chưa đến 1 ngày',
+    'profiles.restore': 'Khôi phục',
+    'profiles.restored': 'Đã khôi phục {name}',
+    'profiles.purge': 'Xoá vĩnh viễn',
+    'profiles.purgeTitle': 'Xoá vĩnh viễn “{name}”?',
+    'profiles.purgeBody': 'Fingerprint và toàn bộ dữ liệu browser của profile sẽ bị xoá khỏi máy, không khôi phục được.',
+    'profiles.purged': 'Đã xoá vĩnh viễn {name}',
+    'profiles.emptyTrash': 'Dọn thùng rác',
+    'profiles.emptyTrashTitle': 'Dọn sạch thùng rác?',
+    'profiles.emptyTrashBody': 'Cả {n} profile trong thùng rác sẽ bị xoá vĩnh viễn cùng dữ liệu, không hoàn tác được.',
+    'profiles.emptied': 'Đã dọn thùng rác',
     'profiles.deleteBody': 'Fingerprint và toàn bộ dữ liệu browser (cookie, đăng nhập, lịch sử) của profile sẽ bị xoá khỏi máy, không khôi phục được.',
     'profiles.deleteRunning': 'Profile đang chạy sẽ được dừng trước.',
     'profiles.deleting': 'Đang xoá…',
@@ -379,6 +421,36 @@ CM.pages.profiles = {
 
     const dlg = reactive({ open: false, name: '', os: 'win', busy: false });
     const del = reactive({ p: null, busy: false });
+    // CM-3.1 trash: list + retention, dialog, confirm (kind 'one' with p, or 'all')
+    const trash = reactive({ open: false, days: 7, items: [], busy: false, confirm: null });
+    async function loadTrash() {
+      try { const r = await api('/api/profiles/trash'); trash.days = r.days; trash.items = r.profiles; } catch (e) { /* keep the last list */ }
+    }
+    const openDel = p => { del.p = p; loadTrash(); };
+    const daysLeft = it => trash.days - Math.floor((Date.now() - Date.parse(it.deletedAt)) / 86400000);
+    const leftText = it => { const n = daysLeft(it); return n <= 0 ? t('profiles.trashLeftSoon') : t('profiles.trashLeft', { n }); };
+    async function trashAct(fn) {
+      trash.busy = true;
+      try { await fn(); } catch (e) { toast(e.message, true); }
+      trash.busy = false; trash.confirm = null; await loadTrash(); load();
+    }
+    const restore = it => trashAct(async () => {
+      await api(`/api/profiles/${it.id}/restore`, { method: 'POST' });
+      toast(t('profiles.restored', { name: it.name }));
+    });
+    const purge = it => trashAct(async () => {
+      await api(`/api/profiles/${it.id}/purge`, { method: 'DELETE' });
+      toast(t('profiles.purged', { name: it.name }));
+    });
+    const emptyTrash = () => trashAct(async () => {
+      await api('/api/profiles/trash/empty', { method: 'POST' });
+      toast(t('profiles.emptied'));
+    });
+    async function saveDays(e) {
+      const n = Math.max(0, Math.min(365, parseInt(e.target.value, 10) || 0));
+      try { await api('/api/settings', { method: 'PUT', body: JSON.stringify({ trashDays: n }) }); trash.days = n; } catch (err) { toast(err.message, true); }
+      e.target.value = trash.days;
+    }
     const edit = reactive({ id: null });
     const editing = computed(() => (edit.id && o.value?.profiles.find(p => p.id === edit.id)) || null);
     const cookies = reactive({ id: null }); // cookies dialog (components/cookies.js)
@@ -403,7 +475,7 @@ CM.pages.profiles = {
         toast(t('profiles.deleted', { name: p.name }));
         del.p = null;
       } catch (e) { toast(e.message, true); }
-      del.busy = false; busy[p.id] = false; load();
+      del.busy = false; busy[p.id] = false; load(); loadTrash();
     }
 
     const xfer = reactive({ exp: null, clone: null }); // components/transfer.js dialogs
@@ -411,7 +483,7 @@ CM.pages.profiles = {
 
     let timer;
     onMounted(() => {
-      load();
+      load(); loadTrash();
       timer = setInterval(() => load(), 5000); // local state only
       document.addEventListener('mouseup', up);
       document.addEventListener('copy', onCopy);
@@ -423,7 +495,7 @@ CM.pages.profiles = {
     });
 
     return {
-      xfer, tplx, ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, hintDetail, goInstall, goLog, dlg, del, edit, editing, cookies, cookiesFor, nameInput, openCreate, create, remove, head, busy, q, filter, refreshing, sheet,
+      xfer, tplx, ...px, ALL, GROUPS, FILTERS, OSES, o, pn, hint, hintDetail, goInstall, goLog, dlg, del, edit, editing, cookies, cookiesFor, nameInput, openCreate, create, remove, trash, openDel, leftText, restore, purge, emptyTrash, saveDays, head, busy, q, filter, refreshing, sheet,
       runCount, view, raw, orgx, manage, load, cellState, selectRow, down, over, dbl, onKey, copyAll, refresh, act, reveal, fmt,
     };
   },
@@ -444,6 +516,7 @@ CM.pages.profiles = {
       <button class="btn" :disabled="refreshing" @click="refresh" :title="t('profiles.refreshTitle')">
         <span v-if="refreshing" class="spin"></span><cm-icon v-else name="refresh" :size="14"/> {{ t('common.refresh') }}
       </button>
+      <button class="btn" @click="trash.open = true" :title="t('profiles.trashTitle')">🗑 {{ trash.items.length ? t('profiles.trashCount', { n: trash.items.length }) : t('profiles.trash') }}</button>
       <cm-transfer :export-profile="xfer.exp" :clone-profile="xfer.clone" @close-export="xfer.exp = null" @close-clone="xfer.clone = null" @changed="load()"/>
       <cm-sheets @changed="load()"/>
       <button v-if="o" class="btn btn-start" :disabled="!o.providerAvailable" :title="o.providerAvailable ? t('profiles.newTitle') : hint" @click="openCreate">
@@ -557,7 +630,7 @@ CM.pages.profiles = {
               <button class="icon-btn" :disabled="!!busy[p.id] || !!p.running" :title="p.running ? t('cookies.running') : t('cookies.title', { name: p.name })" @click="cookies.id = p.id">🍪</button>
               <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('tpl.prof.extBtn')" @click="tplx.ext = p">🧩</button>
               <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('tpl.prof.starTitle')" @click="tplx.save = p">★</button>
-              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('profiles.delete')" @click="del.p = p">🗑</button>
+              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('profiles.delete')" @click="openDel(p)">🗑</button>
             </td>
           </tr>
         </tbody>
@@ -589,11 +662,43 @@ CM.pages.profiles = {
 
     <!-- ===== delete ===== -->
     <cm-dialog :open="!!del.p" :title="del.p ? t('profiles.deleteTitle', { name: del.p.name }) : ''" :busy="del.busy" @close="del.p = null">
-      <p class="m-0 text-[13px] text-muted">{{ t('profiles.deleteBody') }}<template v-if="del.p?.running"> {{ t('profiles.deleteRunning') }}</template></p>
+      <p class="m-0 text-[13px] text-muted">{{ trash.days ? t('profiles.deleteBodyTrash', { days: trash.days }) : t('profiles.deleteBody') }}<template v-if="del.p?.running"> {{ t('profiles.deleteRunning') }}</template></p>
       <template #footer>
         <button class="btn" :disabled="del.busy" @click="del.p = null">{{ t('common.cancel') }}</button>
         <button class="btn btn-stop" :disabled="del.busy" @click="remove">
           <template v-if="del.busy"><span class="spin"></span> {{ t('profiles.deleting') }}</template><template v-else>{{ t('common.delete') }}</template>
+        </button>
+      </template>
+    </cm-dialog>
+
+    <!-- ===== trash (CM-3.1) ===== -->
+    <cm-dialog :open="trash.open" :title="t('profiles.trash')" :busy="trash.busy" :width="520" @close="trash.open = false">
+      <p class="m-0 text-[13px] text-muted">{{ trash.days ? t('profiles.trashInfo', { days: trash.days }) : t('profiles.trashOff') }}</p>
+      <p v-if="!trash.items.length" class="m-0 py-4 text-center text-[13px] text-muted">{{ t('profiles.trashEmpty') }}</p>
+      <ul v-else class="m-0 p-0 list-none flex flex-col gap-1 max-h-[320px] overflow-auto">
+        <li v-for="it in trash.items" :key="it.id" class="flex items-center gap-2 px-2 py-[6px] rounded-lg bg-panel2">
+          <div class="flex-1 min-w-0">
+            <div class="text-[13px] font-semibold truncate">{{ it.name }}</div>
+            <div class="text-[11.5px] text-faint">{{ t('profiles.trashDeleted', { ago: fmt.ago(it.deletedAt) }) }} · {{ leftText(it) }}</div>
+          </div>
+          <button class="btn" :disabled="trash.busy" @click="restore(it)">{{ t('profiles.restore') }}</button>
+          <button class="btn btn-stop" :disabled="trash.busy" @click="trash.confirm = { p: it }">{{ t('profiles.purge') }}</button>
+        </li>
+      </ul>
+      <label class="flex items-center gap-2 text-[12.5px] text-muted">{{ t('profiles.trashDays') }}
+        <input type="number" min="0" max="365" class="w-[72px]" :value="trash.days" @change="saveDays">
+      </label>
+      <template #footer>
+        <button class="btn btn-stop" :disabled="trash.busy || !trash.items.length" @click="trash.confirm = { all: true }">{{ t('profiles.emptyTrash') }}</button>
+        <button class="btn" @click="trash.open = false">{{ t('common.close') }}</button>
+      </template>
+    </cm-dialog>
+    <cm-dialog :open="!!trash.confirm" :busy="trash.busy" :title="trash.confirm?.all ? t('profiles.emptyTrashTitle') : trash.confirm ? t('profiles.purgeTitle', { name: trash.confirm.p.name }) : ''" @close="trash.confirm = null">
+      <p class="m-0 text-[13px] text-muted">{{ trash.confirm?.all ? t('profiles.emptyTrashBody', { n: trash.items.length }) : t('profiles.purgeBody') }}</p>
+      <template #footer>
+        <button class="btn" :disabled="trash.busy" @click="trash.confirm = null">{{ t('common.cancel') }}</button>
+        <button class="btn btn-stop" :disabled="trash.busy" @click="trash.confirm?.all ? emptyTrash() : purge(trash.confirm.p)">
+          <span v-if="trash.busy" class="spin"></span><template v-else>{{ t('common.delete') }}</template>
         </button>
       </template>
     </cm-dialog>
