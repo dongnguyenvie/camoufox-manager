@@ -9,7 +9,7 @@
 CM.components.CmPage = {
   props: { title: String, count: [Number, String] },
   template: `<section class="flex-1 min-h-0 flex flex-col">
-    <header class="flex flex-wrap items-center gap-3 px-5 min-h-[52px] py-2 border-b border-line bg-panel/90 backdrop-blur-[10px] max-sm:px-4">
+    <header class="relative z-20 flex flex-wrap items-center gap-3 px-5 min-h-[52px] py-2 border-b border-line bg-panel/90 backdrop-blur-[10px] max-sm:px-4">
       <h1 class="m-0 text-[15px] font-semibold tracking-tight whitespace-nowrap">{{ title }}</h1>
       <span v-if="count !== undefined && count !== null" class="text-[13px] text-faint -ml-1">{{ count }}</span>
       <slot name="tools"></slot>

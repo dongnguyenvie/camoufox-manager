@@ -46,10 +46,14 @@ pub fn run() -> Result<()> {
     };
     let _webview = builder.build(&window)?;
 
+    let mut app = app;
     event_loop.run(move |event, _, flow| {
         *flow = ControlFlow::Wait;
-        if let Event::WindowEvent { event: WindowEvent::CloseRequested, .. } = event {
-            if let Some(app) = &app {
+        // Closing the window and Cmd+Q / app Quit (LoopDestroyed) both stop the browsers first, so a
+        // normal quit is not reported as a crash on the next start. `take` runs it once.
+        let quit = matches!(event, Event::WindowEvent { event: WindowEvent::CloseRequested, .. } | Event::LoopDestroyed);
+        if quit {
+            if let Some(app) = app.take() {
                 rt.block_on(async {
                     let _ = tokio::time::timeout(Duration::from_secs(15), app.stop_all()).await;
                 });
