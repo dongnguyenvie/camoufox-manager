@@ -71,6 +71,14 @@ Transfers are chunked and resumable, with SHA-256 checks on each chunk and on th
 side applies the copy in a staged, journalled way: a failed or cancelled copy leaves the existing profile
 unchanged, and a replaced profile's old data is kept as a backup.
 
+## Profiles in the trash
+
+A profile in the trash is never offered to the other device, whether you pull or push. It still counts as the
+same profile when the other device sends it: an incoming update restores it from the trash and applies like
+any update for a profile you have (so changes on both sides still show as a conflict, and "Save as a copy" adds
+a separate profile and leaves the trashed one alone). If applying the update fails, the profile goes back to
+the trash. Deleting a profile forever removes its sync history with every device.
+
 ## Revoke a device
 
 Open the device in **Paired devices** and choose **Revoke**. A revoked device can no longer sync. Use

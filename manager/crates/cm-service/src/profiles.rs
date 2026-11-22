@@ -126,6 +126,17 @@ impl Manager {
         self.d.profiles.get(id).await?.ok_or_else(|| CmError::NotFound(format!("profile {id}")).into())
     }
 
+    /// A live profile, or one in the trash (sync applies an update to either).
+    pub(crate) async fn profile_or_trashed(&self, id: &str) -> Result<Profile> {
+        if let Some(p) = self.d.profiles.get(id).await? {
+            return Ok(p);
+        }
+        match self.d.profiles.list_trashed().await?.into_iter().find(|t| t.profile.id == id) {
+            Some(t) => Ok(t.profile),
+            None => Err(CmError::NotFound(format!("profile {id}")).into()),
+        }
+    }
+
     /// Forget browsers the engine reports as gone (user closed the window, crash).
     pub(crate) async fn prune_dead(&self) {
         let ids: Vec<String> = self.running.lock().await.keys().cloned().collect();
@@ -338,6 +349,7 @@ impl Manager {
         let _ = self.lease_release(id, None).await;
         if self.trash_days().await == 0 {
             self.d.profiles.delete(id).await?;
+            let _ = self.sync_forget(id);
             return self.d.engine.delete_data(id).await;
         }
         self.d.profiles.trash(id, &self.d.clock.now_iso()).await
@@ -374,7 +386,8 @@ impl Manager {
             bail!(CmError::NotFound(format!("trashed profile {id}")));
         }
         self.d.engine.delete_data(id).await?;
-        self.d.profiles.purge(id).await
+        self.d.profiles.purge(id).await?;
+        self.sync_forget(id)
     }
 
     /// Purge everything in the trash; returns how many profiles were removed.
