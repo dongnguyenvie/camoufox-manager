@@ -16,7 +16,7 @@ impl SqliteProxies {
     }
 }
 
-const COLS: &str = "id, name, scheme, host, port, username, password, created_at, last_check";
+const COLS: &str = "id, name, scheme, host, port, username, password, created_at, last_check, rotate_url, rotate_on_start";
 
 fn from_row(r: &Row) -> rusqlite::Result<Proxy> {
     let scheme: String = r.get(2)?;
@@ -31,14 +31,17 @@ fn from_row(r: &Row) -> rusqlite::Result<Proxy> {
         password: r.get(6)?,
         created_at: r.get(7)?,
         last_check: check.and_then(|s| serde_json::from_str(&s).ok()),
+        rotate_url: r.get(9)?,
+        rotate_on_start: r.get::<_, i64>(10)? != 0,
     })
 }
 
 /// Insert inside an existing connection/transaction (used by the legacy import too).
 pub(crate) fn insert(c: &Connection, p: &NewProxy) -> Result<ProxyId> {
     c.execute(
-        "INSERT INTO proxies (name, scheme, host, port, username, password, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![p.name, p.scheme.as_str(), p.host, p.port, p.username, p.password, SystemClock.now_iso()],
+        "INSERT INTO proxies (name, scheme, host, port, username, password, created_at, rotate_url, rotate_on_start)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![p.name, p.scheme.as_str(), p.host, p.port, p.username, p.password, SystemClock.now_iso(), p.rotate_url, p.rotate_on_start],
     )?;
     Ok(c.last_insert_rowid())
 }
@@ -72,8 +75,9 @@ impl ProxyRepo for SqliteProxies {
         self.db.with(|c| {
             let n = c.execute(
                 "UPDATE proxies SET name = ?2, scheme = ?3, host = ?4, port = ?5, username = ?6,
-                 password = COALESCE(?7, password) WHERE id = ?1",
-                params![id, p.name, p.scheme.as_str(), p.host, p.port, p.username, p.password],
+                 password = COALESCE(?7, password),
+                 rotate_url = ?8, rotate_on_start = ?9 WHERE id = ?1",
+                params![id, p.name, p.scheme.as_str(), p.host, p.port, p.username, p.password, p.rotate_url, p.rotate_on_start],
             )?;
             if n == 0 { Err(not_found(id)) } else { Ok(()) }
         })
@@ -120,6 +124,25 @@ mod tests {
         repo.update(p.id, &NewProxy { name: "b".into(), host: "1.2.3.4".into(), port: 81, ..Default::default() }).await.unwrap();
         let got = repo.get(p.id).await.unwrap().unwrap();
         assert_eq!((got.name.as_str(), got.port, got.password.as_deref()), ("b", 81, Some("p")));
+        assert_eq!((got.rotate_url.as_deref(), got.rotate_on_start), (None, false));
+        repo.update(
+            p.id,
+            &NewProxy {
+                name: "b".into(),
+                host: "1.2.3.4".into(),
+                port: 81,
+                rotate_url: Some("https://x.example/r?t=1".into()),
+                rotate_on_start: true,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        let got = repo.get(p.id).await.unwrap().unwrap();
+        assert_eq!(
+            (got.rotate_url.as_deref(), got.rotate_on_start, got.password.as_deref()),
+            (Some("https://x.example/r?t=1"), true, Some("p"))
+        );
 
         let profiles = SqliteProfiles::new(db);
         let mut prof = crate::profiles::tests_support::sample("bb22");

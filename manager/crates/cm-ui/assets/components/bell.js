@@ -17,6 +17,7 @@ I18N.add({
     'bell.t.schedule.failed': 'Scheduled run failed: {schedule}',
     'bell.t.schedule.finished': 'Scheduled run finished: {schedule}',
     'bell.t.proxy.check_failed': 'Proxy check failed: {proxy}',
+    'bell.t.proxy.rotate_failed': 'Change IP failed: {proxy}',
     'bell.t.transfer.export_finished': 'Profile export finished',
     'bell.t.transfer.import_finished': 'Profile import finished',
     'bell.t.sheets.export_finished': 'Spreadsheet export finished',
@@ -25,6 +26,7 @@ I18N.add({
     'bell.b.schedule.finished': '{profile}',
     'bell.b.profile.crashed': '{detail}',
     'bell.b.proxy.check_failed': '{error}',
+    'bell.b.proxy.rotate_failed': '{error}',
   },
   vi: {
     'bell.title': 'Thông báo',
@@ -37,6 +39,7 @@ I18N.add({
     'bell.t.schedule.failed': 'Lượt chạy theo lịch lỗi: {schedule}',
     'bell.t.schedule.finished': 'Lượt chạy theo lịch xong: {schedule}',
     'bell.t.proxy.check_failed': 'Kiểm tra proxy lỗi: {proxy}',
+    'bell.t.proxy.rotate_failed': 'Đổi IP lỗi: {proxy}',
     'bell.t.transfer.export_finished': 'Đã export profile xong',
     'bell.t.transfer.import_finished': 'Đã import profile xong',
     'bell.t.sheets.export_finished': 'Đã export bảng tính xong',
@@ -45,6 +48,7 @@ I18N.add({
     'bell.b.schedule.finished': '{profile}',
     'bell.b.profile.crashed': '{detail}',
     'bell.b.proxy.check_failed': '{error}',
+    'bell.b.proxy.rotate_failed': '{error}',
   },
 });
 

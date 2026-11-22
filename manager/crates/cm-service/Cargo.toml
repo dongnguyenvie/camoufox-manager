@@ -23,6 +23,7 @@ csv = "1.4.0"
 chrono-tz = "0.10.4"
 chrono = "0.4.45"
 rusqlite.workspace = true
+reqwest.workspace = true
 
 [dev-dependencies]
 cm-store.workspace = true

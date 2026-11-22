@@ -456,6 +456,7 @@ dependencies = [
  "cm-sync",
  "csv",
  "getrandom 0.3.4",
+ "reqwest",
  "rusqlite",
  "rust_xlsxwriter",
  "serde",

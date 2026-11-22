@@ -45,6 +45,13 @@ I18N.add({
     'proxies.f.pass': 'Password',
     'proxies.f.passKeep': 'Unchanged (stored)',
     'proxies.f.passClear': 'Remove the stored password',
+    'proxies.f.rotateUrl': 'Change-IP link',
+    'proxies.f.rotateUrlHint': 'Optional. http(s) link of a rotating provider; opened directly (not through the proxy). It may contain a token — keep it private.',
+    'proxies.f.rotateOnStart': 'Change IP before every start',
+    'proxies.rotate': 'Change IP',
+    'proxies.rotated': 'IP changed: {ip} · {country} · {tz}',
+    'proxies.rotatedNoGeo': 'IP change requested, but the re-check failed: {msg}',
+    'proxies.rotateFailed': 'Change IP failed: {msg}',
     'proxies.saved': 'Proxy saved',
     'proxies.deleteTitle': 'Delete proxy?',
     'proxies.deleteBody': '{name} will be removed and unassigned from the profiles that use it.',
@@ -124,6 +131,13 @@ I18N.add({
     'proxies.f.pass': 'Mật khẩu',
     'proxies.f.passKeep': 'Giữ nguyên (đã lưu)',
     'proxies.f.passClear': 'Xoá mật khẩu đã lưu',
+    'proxies.f.rotateUrl': 'Link đổi IP',
+    'proxies.f.rotateUrlHint': 'Tuỳ chọn. Link http(s) của nhà cung cấp proxy xoay; được gọi trực tiếp (không qua proxy). Link có thể chứa token — hãy giữ kín.',
+    'proxies.f.rotateOnStart': 'Đổi IP trước mỗi lần Start',
+    'proxies.rotate': 'Đổi IP',
+    'proxies.rotated': 'Đã đổi IP: {ip} · {country} · {tz}',
+    'proxies.rotatedNoGeo': 'Đã gọi đổi IP nhưng kiểm tra lại lỗi: {msg}',
+    'proxies.rotateFailed': 'Đổi IP lỗi: {msg}',
     'proxies.saved': 'Đã lưu proxy',
     'proxies.deleteTitle': 'Xoá proxy?',
     'proxies.deleteBody': '{name} sẽ bị xoá và gỡ khỏi các profile đang dùng.',
@@ -180,6 +194,17 @@ function useProxies(ctx) {
     checking.value = null; ctx.load && ctx.load();
   }
 
+  async function rotate(id) {
+    checking.value = id;
+    try {
+      const r = await api(`/api/proxies/${id}/rotate`, { method: 'POST' });
+      if (!r.ok) toast(t('proxies.rotateFailed', { msg: r.error }), true);
+      else if (r.geo) toast(t('proxies.rotated', { ip: r.geo.ip, country: r.geo.country, tz: r.geo.timezone }));
+      else toast(t('proxies.rotatedNoGeo', { msg: r.error }), true);
+    } catch (err) { toast(t('proxies.rotateFailed', { msg: err.message }), true); }
+    checking.value = null; ctx.load && ctx.load();
+  }
+
   async function assign(p, e) {
     const proxyId = e.target.value === '' ? null : Number(e.target.value);
     e.target.blur();
@@ -191,7 +216,7 @@ function useProxies(ctx) {
     ctx.load && ctx.load();
   }
 
-  return { proxies, checking, fetchProxies, check, assign, noProxy: () => t('proxies.none') };
+  return { proxies, checking, fetchProxies, check, rotate, assign, noProxy: () => t('proxies.none') };
 }
 
 CM.pages.proxies = {
@@ -223,17 +248,17 @@ CM.pages.proxies = {
     const why = r => t('proxies.why.' + r);
 
     /* ---- add / edit ---- */
-    const form = Vue.reactive({ open: false, id: null, busy: false, name: '', scheme: 'http', host: '', port: '', username: '', password: '', hasPassword: false, clearPassword: false });
+    const form = Vue.reactive({ open: false, id: null, busy: false, name: '', scheme: 'http', host: '', port: '', username: '', password: '', hasPassword: false, clearPassword: false, rotateUrl: '', rotateOnStart: false });
     function openForm(p) {
       Object.assign(form, p
-        ? { id: p.id, name: p.name, scheme: p.scheme, host: p.host, port: String(p.serverPort), username: p.username || '', password: '', hasPassword: p.hasPassword }
-        : { id: null, name: '', scheme: 'http', host: '', port: '', username: '', password: '', hasPassword: false },
+        ? { id: p.id, name: p.name, scheme: p.scheme, host: p.host, port: String(p.serverPort), username: p.username || '', password: '', hasPassword: p.hasPassword, rotateUrl: p.rotateUrl || '', rotateOnStart: !!p.rotateOnStart }
+        : { id: null, name: '', scheme: 'http', host: '', port: '', username: '', password: '', hasPassword: false, rotateUrl: '', rotateOnStart: false },
         { open: true, clearPassword: false });
     }
     async function saveForm() {
       form.busy = true;
       try {
-        const body = { name: form.name, scheme: form.scheme, host: form.host, port: Number(form.port), username: form.username || null };
+        const body = { name: form.name, scheme: form.scheme, host: form.host, port: Number(form.port), username: form.username || null, rotateUrl: form.rotateUrl.trim() || null, rotateOnStart: form.rotateOnStart && !!form.rotateUrl.trim() };
         if (form.password) body.password = form.password;
         if (form.clearPassword) body.clearPassword = true;
         await api(form.id ? `/api/proxies/${form.id}` : '/api/proxies', { method: form.id ? 'PUT' : 'POST', body: JSON.stringify(body) });
@@ -336,6 +361,7 @@ CM.pages.proxies = {
             <button class="btn" :disabled="checking === row.id" @click="check(row.id)">
               <span v-if="checking === row.id" class="spin"></span><cm-icon v-else name="check" :size="14"/> {{ t('proxies.check') }}
             </button>
+            <button v-if="row.rotateUrl" class="btn" :disabled="checking === row.id" @click="rotate(row.id)">{{ t('proxies.rotate') }}</button>
             <button class="btn" @click="openAssign(row)">{{ t('proxies.assign') }}</button>
             <button class="btn" @click="openForm(row)">{{ t('proxies.edit') }}</button>
             <button class="btn" @click="del.p = row; del.open = true">{{ t('common.delete') }}</button>
@@ -358,6 +384,8 @@ CM.pages.proxies = {
         <input class="input" type="password" v-model="form.password" autocomplete="new-password" :placeholder="form.hasPassword ? t('proxies.f.passKeep') : ''" :disabled="form.clearPassword">
       </cm-field>
       <cm-switch v-if="form.id && form.hasPassword" v-model="form.clearPassword" :label="t('proxies.f.passClear')"/>
+      <cm-field :label="t('proxies.f.rotateUrl')" :hint="t('proxies.f.rotateUrlHint')"><input class="input font-mono text-[12.5px]" v-model="form.rotateUrl" autocomplete="off" spellcheck="false" placeholder="https://"></cm-field>
+      <cm-switch v-if="form.rotateUrl.trim()" v-model="form.rotateOnStart" :label="t('proxies.f.rotateOnStart')"/>
       <template #footer>
         <button class="btn" :disabled="form.busy" @click="form.open = false">{{ t('common.cancel') }}</button>
         <button class="btn btn-start" :disabled="form.busy || !form.host || !form.port" @click="saveForm">{{ t('common.save') }}</button>

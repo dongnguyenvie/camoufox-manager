@@ -221,3 +221,78 @@ async fn bulk_and_sequential_assignment() {
     let r = m.assign_sequence(many).await.unwrap();
     assert_eq!(r.pairs[1].reason, Some("no-proxy"));
 }
+
+/// Loopback HTTP server answering every request with `status`; counts the requests.
+async fn http_stub(status: &'static str) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}/rotate?token=SECRET-TOKEN", l.local_addr().unwrap());
+    let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let h = hits.clone();
+    tokio::spawn(async move {
+        while let Ok((mut s, _)) = l.accept().await {
+            h.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let mut buf = [0u8; 2048];
+            let _ = s.read(&mut buf).await;
+            let _ = s.write_all(format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").as_bytes()).await;
+        }
+    });
+    (url, hits)
+}
+
+#[tokio::test]
+async fn rotate_ip_calls_link_then_rechecks() {
+    let (m, _) = manager(true, free_port().await);
+    let (url, hits) = http_stub("200 OK").await;
+    let v =
+        m.create_proxy(NewProxy { host: "h.example".into(), port: 80, rotate_url: Some(url.clone()), ..Default::default() }).await.unwrap();
+    assert_eq!(v.rotate_url.as_deref(), Some(url.as_str()));
+    let r = m.rotate_ip(v.id).await.unwrap();
+    assert!(r.ok && r.error.is_none());
+    assert_eq!(r.geo.unwrap().ip, "9.9.9.9");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert!(m.proxy(v.id).await.unwrap().last_check.is_some());
+    // no link -> invalid
+    let plain = m.create_proxy(NewProxy { host: "g.example".into(), port: 80, ..Default::default() }).await.unwrap();
+    assert!(m.rotate_ip(plain.id).await.is_err());
+}
+
+#[tokio::test]
+async fn rotate_ip_failure_is_a_result_without_the_url() {
+    let (m, _) = manager(true, free_port().await);
+    let (url, _) = http_stub("500 Internal Server Error").await;
+    let v = m.create_proxy(NewProxy { host: "h.example".into(), port: 80, rotate_url: Some(url), ..Default::default() }).await.unwrap();
+    let r = m.rotate_ip(v.id).await.unwrap();
+    assert!(!r.ok && r.geo.is_none());
+    let err = r.error.unwrap();
+    assert!(err.contains("500") && !err.contains("SECRET-TOKEN"), "{err}");
+    // unreachable link: the connection error has no URL either
+    let dead = format!("http://127.0.0.1:{}/r?token=SECRET-TOKEN", free_port().await);
+    let d = m.create_proxy(NewProxy { host: "d.example".into(), port: 80, rotate_url: Some(dead), ..Default::default() }).await.unwrap();
+    let r = m.rotate_ip(d.id).await.unwrap();
+    assert!(!r.ok && !r.error.unwrap().contains("SECRET-TOKEN"));
+}
+
+#[tokio::test]
+async fn rotate_on_start_runs_and_never_blocks_launch() {
+    let (m, _) = manager(true, free_port().await);
+    let (ok_url, hits) = http_stub("200 OK").await;
+    let (bad_url, _) = http_stub("503 Service Unavailable").await;
+    for (url, expect_hits) in [(ok_url, 1), (bad_url, 1)] {
+        let px = m
+            .create_proxy(NewProxy {
+                host: "127.0.0.1".into(),
+                port: 9,
+                rotate_url: Some(url),
+                rotate_on_start: true,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        let prof = m.create_profile(NewProfile { name: "p".into(), os: "win".into() }).await.unwrap().id;
+        m.assign(&prof, Some(px.id)).await.unwrap();
+        m.start(&prof).await.unwrap();
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), expect_hits);
+        m.stop(&prof).await.unwrap();
+    }
+}

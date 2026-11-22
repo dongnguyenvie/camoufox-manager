@@ -73,6 +73,12 @@ pub struct Proxy {
     pub password: Option<String>,
     pub created_at: String,
     pub last_check: Option<ProxyCheck>,
+    /// "Change IP" link of rotating providers (http/https GET). May hold a token: never log it.
+    #[serde(default)]
+    pub rotate_url: Option<String>,
+    /// Call `rotate_url` before every profile start.
+    #[serde(default)]
+    pub rotate_on_start: bool,
 }
 
 impl Proxy {
@@ -96,6 +102,10 @@ pub struct NewProxy {
     pub port: u16,
     pub username: Option<String>,
     pub password: Option<String>,
+    #[serde(default)]
+    pub rotate_url: Option<String>,
+    #[serde(default)]
+    pub rotate_on_start: bool,
 }
 
 #[async_trait]
@@ -104,7 +114,7 @@ pub trait ProxyRepo: Send + Sync {
     async fn list(&self) -> Result<Vec<Proxy>>;
     async fn get(&self, id: ProxyId) -> Result<Option<Proxy>>;
     async fn insert(&self, p: &NewProxy) -> Result<Proxy>;
-    /// Replace name/scheme/host/port/username; `password: None` keeps the stored one.
+    /// Replace name/scheme/host/port/username/rotate settings; `password: None` keeps the stored one.
     async fn update(&self, id: ProxyId, p: &NewProxy) -> Result<()>;
     /// Delete and unassign from every profile.
     async fn delete(&self, id: ProxyId) -> Result<()>;
@@ -133,6 +143,8 @@ mod tests {
             password: Some("secret".into()),
             created_at: String::new(),
             last_check: None,
+            rotate_url: None,
+            rotate_on_start: false,
         };
         let j = serde_json::to_string(&p).unwrap();
         assert!(!j.contains("secret"));

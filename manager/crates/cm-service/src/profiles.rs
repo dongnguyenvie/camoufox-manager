@@ -195,6 +195,7 @@ impl Manager {
         if let Some(pid) = profile.proxy_id {
             // Relay up and geo known BEFORE the browser opens: dead proxy → no browser (fail-closed).
             let proxy = self.proxy(pid).await?;
+            self.rotate_on_start(&proxy).await;
             let p = self.ensure_relay(&proxy).await?;
             let g = match self.check_proxy(pid, false).await {
                 Ok(g) => g,

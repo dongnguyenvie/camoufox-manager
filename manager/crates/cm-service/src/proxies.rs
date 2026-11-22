@@ -17,6 +17,9 @@ const IMPORT_MAX_LINES: usize = 10_000;
 const IMPORT_MAX_CHARS: usize = 2_000_000;
 /// Profiles per bulk / sequential assignment.
 const ASSIGN_MAX: usize = 10_000;
+/// Change-IP link: request timeout and longest accepted URL.
+const ROTATE_TIMEOUT_SECS: u64 = 15;
+const ROTATE_URL_MAX: usize = 2048;
 
 /// Proxy as the UI sees it (no password).
 #[derive(Clone, Serialize)]
@@ -31,6 +34,9 @@ pub struct ProxyView {
     pub server_port: u16,
     pub username: Option<String>,
     pub has_password: bool,
+    /// Change-IP link (the edit form shows it; it may hold a token, so it is never logged).
+    pub rotate_url: Option<String>,
+    pub rotate_on_start: bool,
     /// Local relay port the browser uses for this proxy.
     pub port: Option<u16>,
     /// Last check, if any.
@@ -55,6 +61,18 @@ pub struct ImportReport {
     pub created: Vec<ProxyView>,
     /// 1-based line numbers of exact duplicates (already stored, or repeated in the list).
     pub skipped: Vec<usize>,
+}
+
+/// Outcome of a change-IP call. A failing link is a result, not an `Err`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RotateResult {
+    /// The link answered 2xx.
+    pub ok: bool,
+    /// Re-check after the rotation (the geo follows the new IP).
+    pub geo: Option<ProxyCheck>,
+    /// Why the link or the re-check failed. Never contains the URL.
+    pub error: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -129,6 +147,11 @@ fn normalize(mut p: NewProxy) -> Result<NewProxy, &'static str> {
         return Err("bad-host");
     }
     p.host = host;
+    p.rotate_url = match p.rotate_url.take().map(|u| u.trim().to_string()).filter(|u| !u.is_empty()) {
+        Some(u) => Some(valid_rotate_url(&u)?),
+        None => None,
+    };
+    p.rotate_on_start &= p.rotate_url.is_some();
     if p.port == 0 {
         return Err("bad-port");
     }
@@ -158,6 +181,28 @@ fn normalize(mut p: NewProxy) -> Result<NewProxy, &'static str> {
         p.name = if p.host.contains(':') { format!("[{}]:{}", p.host, p.port) } else { format!("{}:{}", p.host, p.port) };
     }
     Ok(p)
+}
+
+/// http/https with a host; the error code never echoes the URL.
+fn valid_rotate_url(u: &str) -> Result<String, &'static str> {
+    if u.len() > ROTATE_URL_MAX {
+        return Err("bad-rotate-url");
+    }
+    match reqwest::Url::parse(u) {
+        Ok(url) if matches!(url.scheme(), "http" | "https") && url.host_str().is_some() => Ok(u.to_string()),
+        _ => Err("bad-rotate-url"),
+    }
+}
+
+/// GET the link directly (never through a proxy). The error text carries no URL.
+async fn call_rotate_url(url: &str) -> Result<()> {
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(std::time::Duration::from_secs(ROTATE_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| anyhow::anyhow!("{}", e.without_url()))?;
+    let resp = client.get(url).send().await.map_err(|e| anyhow::anyhow!("{}", e.without_url()))?;
+    if resp.status().is_success() { Ok(()) } else { bail!("change-IP link answered HTTP {}", resp.status().as_u16()) }
 }
 
 fn pct_decode(s: &str) -> Option<String> {
@@ -273,6 +318,8 @@ impl Manager {
             server_port: p.port,
             username: p.username.clone(),
             has_password: p.has_password(),
+            rotate_url: p.rotate_url.clone(),
+            rotate_on_start: p.rotate_on_start,
             port: self.relay_port(p.id),
             geo: p.last_check.clone(),
             used_by: None,
@@ -348,7 +395,15 @@ impl Manager {
             .list()
             .await?
             .into_iter()
-            .map(|p| NewProxy { name: p.name, scheme: p.scheme, host: p.host, port: p.port, username: p.username, password: p.password })
+            .map(|p| NewProxy {
+                name: p.name,
+                scheme: p.scheme,
+                host: p.host,
+                port: p.port,
+                username: p.username,
+                password: p.password,
+                ..Default::default()
+            })
             .collect();
         let (mut created, mut skipped) = (Vec::new(), Vec::new());
         for (line, p) in parsed {
@@ -380,6 +435,35 @@ impl Manager {
         };
         self.d.proxies.set_check(id, &c).await?;
         Ok(c)
+    }
+
+    /// Call the proxy's change-IP link, then re-check so the geo follows the new IP. Link and
+    /// re-check failures come back in the result (and as a notification); only an unknown proxy
+    /// or a missing link is an `Err`.
+    pub async fn rotate_ip(&self, id: ProxyId) -> Result<RotateResult> {
+        let p = self.proxy(id).await?;
+        let Some(url) = p.rotate_url.as_deref() else { return invalid("this proxy has no change-IP link") };
+        if let Err(e) = call_rotate_url(url).await {
+            let error = format!("{e:#}");
+            self.notify("proxy.rotate_failed", serde_json::json!({ "proxy": p.name, "id": id, "error": error }), None).await;
+            return Ok(RotateResult { ok: false, geo: None, error: Some(error) });
+        }
+        match self.check_proxy(id, true).await {
+            Ok(geo) => Ok(RotateResult { ok: true, geo: Some(geo), error: None }),
+            Err(e) => Ok(RotateResult { ok: true, geo: None, error: Some(format!("{e:#}")) }),
+        }
+    }
+
+    /// Start hook: rotate before the stale-check when the proxy asks for it. Failure never blocks the launch.
+    pub(crate) async fn rotate_on_start(&self, p: &Proxy) {
+        if !p.rotate_on_start || p.rotate_url.is_none() {
+            return;
+        }
+        match self.rotate_ip(p.id).await {
+            Ok(r) if !r.ok => eprintln!("warning: change-IP for proxy #{} failed, starting anyway", p.id),
+            Err(_) => eprintln!("warning: change-IP for proxy #{} not possible, starting anyway", p.id),
+            _ => {}
+        }
     }
 
     /// Assign (`Some`) or clear (`None`) a profile's proxy. Applies at the next start.
@@ -545,6 +629,21 @@ mod tests {
         ] {
             assert_eq!(parse_line(l).unwrap_err(), code, "{l}");
         }
+    }
+
+    #[test]
+    fn rotate_url_is_validated_and_normalised() {
+        let base = || NewProxy { host: "h.example".into(), port: 1, ..Default::default() };
+        let with = |u: &str, on: bool| normalize(NewProxy { rotate_url: Some(u.into()), rotate_on_start: on, ..base() });
+        let ok = with("  https://api.example/rotate?token=abc ", true).unwrap();
+        assert_eq!((ok.rotate_url.as_deref(), ok.rotate_on_start), (Some("https://api.example/rotate?token=abc"), true));
+        for bad in ["ftp://x.example/r", "javascript:alert(1)", "not a url", "http://"] {
+            assert_eq!(with(bad, false).unwrap_err(), "bad-rotate-url", "{bad}");
+        }
+        assert_eq!(with(&format!("http://x.example/{}", "a".repeat(ROTATE_URL_MAX)), false).unwrap_err(), "bad-rotate-url");
+        // empty link -> none, and rotate-on-start cannot stay on without a link
+        let e = with("  ", true).unwrap();
+        assert_eq!((e.rotate_url, e.rotate_on_start), (None, false));
     }
 
     #[test]
