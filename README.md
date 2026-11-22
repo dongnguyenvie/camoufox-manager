@@ -171,3 +171,7 @@ manager/
 - The data folder holds proxy credentials. Protect it, and do not expose the local port through a tunnel or
   port forward without authentication.
 - Check a proxy's IP and geography before starting a profile.
+
+## License
+
+MIT, see [LICENSE](LICENSE). Bundled third-party tools keep their own licenses (see `manager/packaging/licenses/`).
