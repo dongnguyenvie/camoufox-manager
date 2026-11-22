@@ -95,8 +95,20 @@ pub(crate) fn manager(ok: bool, base_port: u16) -> (Manager, Arc<FakeEngine>) {
     (Manager::new(deps, Config { proxy_base_port: base_port, data_dir: PathBuf::from("/tmp"), db_path: None }), engine)
 }
 
+/// A port for a relay base. Taken from a counter below the OS ephemeral range (macOS 49152+,
+/// Linux 32768+ is avoided by starting at 20000), so a port freed here cannot be handed to a
+/// parallel test's `bind(":0")` (stub servers, opt-out relays) before this test binds it. Each
+/// call reserves a block of 32 because relays listen on `base + proxy_id - 1`.
 async fn free_port() -> u16 {
-    tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap().local_addr().unwrap().port()
+    use std::sync::atomic::{AtomicU16, Ordering};
+    static NEXT: AtomicU16 = AtomicU16::new(0);
+    let _ = NEXT.compare_exchange(0, 20000 + (std::process::id() % 200) as u16 * 32, Ordering::SeqCst, Ordering::SeqCst);
+    loop {
+        let port = NEXT.fetch_add(32, Ordering::SeqCst);
+        if (port..port + 32).all(|p| std::net::TcpListener::bind(("127.0.0.1", p)).is_ok()) {
+            return port;
+        }
+    }
 }
 
 #[tokio::test]
