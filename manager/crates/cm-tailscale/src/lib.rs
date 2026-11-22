@@ -230,6 +230,9 @@ pub trait Tailscale: Send + Sync {
 }
 
 /// Where the CLI usually lives on macOS (a GUI app does not inherit the shell PATH).
+#[cfg(windows)]
+const CANDIDATES: &[&str] = &[r"C:\Program Files\Tailscale	ailscale.exe"];
+#[cfg(not(windows))]
 const CANDIDATES: &[&str] = &[
     "/usr/local/bin/tailscale",
     "/opt/homebrew/bin/tailscale",
@@ -245,7 +248,7 @@ pub fn find_binary() -> Option<PathBuf> {
     let from_path = std::env::var_os("PATH")
         .into_iter()
         .flat_map(|p| std::env::split_paths(&p).collect::<Vec<_>>())
-        .map(|d| d.join("tailscale"))
+        .map(|d| d.join(if cfg!(windows) { "tailscale.exe" } else { "tailscale" }))
         .find(|p| p.is_file());
     from_path.or_else(|| CANDIDATES.iter().map(PathBuf::from).find(|p| p.is_file()))
 }

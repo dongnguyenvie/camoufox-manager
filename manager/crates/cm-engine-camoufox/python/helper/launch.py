@@ -11,6 +11,7 @@ import json
 import os
 import signal
 import sys
+import threading
 
 from common import CANVAS_INIT_JS, apply_screen, canvas_seed, check_timezone, decode_chunks, emit, encode_chunks, parse_size
 
@@ -104,10 +105,26 @@ async def cmd_launch(args):
     os.makedirs(args.user_data, exist_ok=True)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
-        loop.add_signal_handler(sig, stop.set)
+    if sys.platform != "win32":
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            loop.add_signal_handler(sig, stop.set)
+
+    async def watch_stdin_thread():
+        # Windows asyncio cannot connect_read_pipe(stdin): read lines in a thread instead.
+        def read_lines():
+            try:
+                for raw in sys.stdin.buffer:
+                    if raw.strip() == b"stop":
+                        break
+            except Exception:
+                pass
+            loop.call_soon_threadsafe(stop.set)
+
+        threading.Thread(target=read_lines, daemon=True).start()
 
     async def watch_stdin():
+        if sys.platform == "win32":
+            return await watch_stdin_thread()
         reader = asyncio.StreamReader()
         await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(reader), sys.stdin)
         while True:

@@ -10,7 +10,7 @@ use crate::{Manager, profiles::ProfileView, profiles::new_id, profiles::validate
 use anyhow::{Context, Result, bail};
 use cm_core::{CmError, Extension, Profile, Template, snapshot::expand_pattern};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeSet, fs, io::Read, os::unix::fs::PermissionsExt, path::PathBuf};
+use std::{collections::BTreeSet, fs, io::Read, path::PathBuf};
 
 /// Largest accepted `.xpi`.
 pub const MAX_XPI_BYTES: usize = 64 * 1024 * 1024;
@@ -162,7 +162,7 @@ impl Manager {
         let info = parse_xpi(bytes)?;
         let dir = self.extensions_dir();
         fs::create_dir_all(&dir)?;
-        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
+        crate::transfer::set_mode(&dir, 0o700)?;
         let file = library_file(&info.addon_id);
         if self.d.extensions.list().await?.iter().any(|e| e.addon_id == info.addon_id) {
             bail!(CmError::Conflict(format!(

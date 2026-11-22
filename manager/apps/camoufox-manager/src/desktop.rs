@@ -31,6 +31,7 @@ pub fn run() -> Result<()> {
     });
 
     let event_loop = EventLoopBuilder::new().build();
+    #[cfg(target_os = "macos")]
     let _menu = install_menu();
     let window = WindowBuilder::new()
         .with_title("Camoufox Manager")
@@ -59,6 +60,7 @@ pub fn run() -> Result<()> {
 }
 
 /// Standard macOS menu: without an Edit menu Cmd+C/V/A do nothing in the webview.
+#[cfg(target_os = "macos")]
 fn install_menu() -> muda::Menu {
     use muda::{Menu, PredefinedMenuItem as P, Submenu};
     let menu = Menu::new();

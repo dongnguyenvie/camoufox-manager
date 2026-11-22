@@ -40,7 +40,7 @@ fn env_port(key: &str) -> Result<Option<u16>> {
 /// "not installed" (see camoufox/setup.sh).
 fn build_engine(data_dir: &std::path::Path) -> Arc<Camoufox> {
     let root = data_dir.join("camoufox");
-    let python = std::env::var("CAMOUFOX_PYTHON").map(PathBuf::from).unwrap_or_else(|_| root.join("venv/bin/python"));
+    let python = std::env::var("CAMOUFOX_PYTHON").map(PathBuf::from).unwrap_or_else(|_| root.join(if cfg!(windows) { "venv\Scripts\python.exe" } else { "venv/bin/python" }));
     let headless = matches!(std::env::var("CAMOUFOX_HEADLESS").as_deref(), Ok("1" | "true"));
     Arc::new(Camoufox::new(root, python, headless))
 }
@@ -139,10 +139,17 @@ async fn serve_headless() -> Result<()> {
     let app2 = app.clone();
     axum::serve(listener, cm_api::router(app))
         .with_graceful_shutdown(async move {
-            let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {}
-                _ = async { match term.as_mut() { Some(t) => { t.recv().await; } None => std::future::pending().await } } => {}
+            #[cfg(unix)]
+            {
+                let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = async { match term.as_mut() { Some(t) => { t.recv().await; } None => std::future::pending().await } } => {}
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                let _ = tokio::signal::ctrl_c().await;
             }
             app2.stop_all().await;
         })

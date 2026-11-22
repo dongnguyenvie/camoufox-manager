@@ -63,6 +63,7 @@ pub(crate) fn summary(v: &EngineVersions) -> Option<String> {
 fn uv_dirs(exe_dir: Option<PathBuf>, path: Option<std::ffi::OsString>, home: &Path) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = exe_dir.into_iter().collect();
     dirs.extend(path.map(|p| std::env::split_paths(&p).collect::<Vec<_>>()).unwrap_or_default());
+    #[cfg(unix)]
     dirs.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from));
     dirs.extend([home.join(".local/bin"), home.join(".cargo/bin")]);
     dirs
@@ -74,9 +75,9 @@ pub(crate) fn find_uv() -> Option<PathBuf> {
     if let Some(p) = std::env::var_os("CAMOUFOX_UV").map(PathBuf::from).filter(|p| p.is_file()) {
         return Some(p);
     }
-    let home = std::env::var("HOME").map(PathBuf::from).unwrap_or_default();
+    let home = std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from).unwrap_or_default();
     let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf));
-    uv_dirs(exe_dir, std::env::var_os("PATH"), &home).into_iter().map(|d| d.join("uv")).find(|p| p.is_file())
+    uv_dirs(exe_dir, std::env::var_os("PATH"), &home).into_iter().map(|d| d.join(if cfg!(windows) { "uv.exe" } else { "uv" })).find(|p| p.is_file())
 }
 
 /// Forward every line (split on `\n` and `\r`, so progress bars become lines) to `tx`.
@@ -135,6 +136,7 @@ async fn step(program: &Path, args: &[&str], path_env: &std::ffi::OsStr, log: &(
 pub(crate) async fn install(python: &Path, log: &(dyn Fn(String) + Send + Sync)) -> Result<()> {
     let venv = match (python.parent(), python.file_name().and_then(|n| n.to_str())) {
         (Some(bin), Some("python")) if bin.file_name().and_then(|n| n.to_str()) == Some("bin") => bin.parent().map(Path::to_path_buf),
+        (Some(bin), Some("python.exe")) if bin.file_name().and_then(|n| n.to_str()) == Some("Scripts") => bin.parent().map(Path::to_path_buf),
         _ => None,
     }
     .with_context(|| format!("cannot install: {} is not <venv>/bin/python (CAMOUFOX_PYTHON points elsewhere)", python.display()))?;
@@ -175,6 +177,7 @@ mod tests {
         assert_eq!(summary(&EngineVersions::default()), None);
     }
 
+    #[cfg(unix)]
     #[test]
     fn uv_lookup_order_prefers_exe_dir_then_path() {
         let dirs = uv_dirs(Some("/app/MacOS".into()), Some("/a:/b".into()), Path::new("/home/u"));

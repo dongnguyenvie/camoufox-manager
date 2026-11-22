@@ -33,10 +33,49 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
     io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
-    os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
 };
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
+
+/// Set unix permission bits; a no-op on Windows (the per-user profile ACL applies).
+pub(crate) fn set_mode(path: &Path, mode: u32) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, mode);
+        Ok(())
+    }
+}
+
+/// `OpenOptions::mode` stand-in so the call sites stay identical on Windows.
+#[cfg(not(unix))]
+pub(crate) trait OpenOptionsExt {
+    fn mode(&mut self, _mode: u32) -> &mut Self;
+}
+#[cfg(not(unix))]
+impl OpenOptionsExt for fs::OpenOptions {
+    fn mode(&mut self, _mode: u32) -> &mut Self {
+        self
+    }
+}
+
+fn nlink_is_one(md: &fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        md.nlink() == 1
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = md;
+        true
+    }
+}
 
 const BUF: usize = 256 * 1024;
 /// Most profiles a single bulk request may create.
@@ -105,8 +144,17 @@ pub(crate) fn sha256_file(p: &Path) -> Result<String> {
     Ok(hex(&h.finalize()))
 }
 
+#[cfg(unix)]
 fn mtime_ns(md: &fs::Metadata) -> i128 {
     i128::from(md.mtime()) * 1_000_000_000 + i128::from(md.mtime_nsec())
+}
+
+#[cfg(not(unix))]
+fn mtime_ns(md: &fs::Metadata) -> i128 {
+    md.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| i128::try_from(d.as_nanos()).unwrap_or(0))
 }
 
 pub(crate) struct Found {
@@ -140,7 +188,7 @@ pub(crate) fn walk(root: &Path) -> Result<(Vec<Found>, Vec<String>)> {
                 }
             } else if is_excluded(&name, false) {
                 continue;
-            } else if ft.is_file() && md.nlink() == 1 && check_rel_path(&path_rel).is_ok() {
+            } else if ft.is_file() && nlink_is_one(&md) && check_rel_path(&path_rel).is_ok() {
                 out.push(Found { rel: path_rel, abs: e.path(), size: md.len(), mtime: mtime_ns(&md) });
             } else {
                 skipped.push(path_rel);
@@ -370,7 +418,7 @@ pub(crate) fn read_manifest(path: &Path) -> Result<SnapshotManifest> {
 fn extract(path: &Path, manifest: &SnapshotManifest, dest: &Path) -> Result<()> {
     let mut zip = ZipArchive::new(BufReader::new(File::open(path)?))?;
     fs::create_dir_all(dest)?;
-    fs::set_permissions(dest, fs::Permissions::from_mode(0o700))?;
+    set_mode(dest, 0o700)?;
     let mut buf = vec![0u8; BUF];
     let mut total = 0u64;
     for entry in &manifest.files {
@@ -412,7 +460,7 @@ fn extract(path: &Path, manifest: &SnapshotManifest, dest: &Path) -> Result<()> 
 /// Copy a data dir (clone): same exclusions as export, plain files only.
 fn copy_tree(src: &Path, dst: &Path) -> Result<usize> {
     fs::create_dir_all(dst)?;
-    fs::set_permissions(dst, fs::Permissions::from_mode(0o700))?;
+    set_mode(dst, 0o700)?;
     if !src.is_dir() {
         return Ok(0);
     }
@@ -490,7 +538,7 @@ impl Manager {
     pub fn upload_path(&self) -> Result<PathBuf> {
         let dir = self.tmp_dir();
         fs::create_dir_all(&dir)?;
-        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
+        set_mode(&dir, 0o700)?;
         Ok(dir.join(format!("import-{}.zip", new_id()?)))
     }
 
@@ -543,7 +591,7 @@ impl Manager {
         };
         let dir = self.exports_dir();
         fs::create_dir_all(&dir)?;
-        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
+        set_mode(&dir, 0o700)?;
         let file_name = format!("{}-{}.zip", file_stem(&p.name), p.id);
         let out = dir.join(&file_name);
         let data = self.d.engine.data_dir(id);
@@ -847,8 +895,11 @@ mod tests {
         fs::write(root.join("storage/default/ls.sqlite"), vec![7u8; 700_000]).unwrap();
         fs::write(root.join("cache2/entries/x"), b"cache").unwrap();
         fs::write(root.join(".parentlock"), b"").unwrap();
-        std::os::unix::fs::symlink("/etc/passwd", root.join("lock")).unwrap();
-        std::os::unix::fs::symlink("/etc/hosts", root.join("evil-link")).unwrap();
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink("/etc/passwd", root.join("lock")).unwrap();
+            std::os::unix::fs::symlink("/etc/hosts", root.join("evil-link")).unwrap();
+        }
     }
 
     #[test]
@@ -859,7 +910,10 @@ mod tests {
         let zip = t.join("out.zip");
         let (n, skipped) = write_zip(&data, base_manifest(), &zip).unwrap();
         assert_eq!(n, 2, "lock files and caches excluded");
+        #[cfg(unix)]
         assert_eq!(skipped, vec!["evil-link".to_string()]);
+        #[cfg(not(unix))]
+        assert!(skipped.is_empty());
         let m = read_manifest(&zip).unwrap();
         assert_eq!(m.files.len(), 2);
         assert!(m.files.iter().all(|f| f.sha256.len() == 64));
