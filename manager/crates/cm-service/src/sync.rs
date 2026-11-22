@@ -343,7 +343,7 @@ impl Manager {
 
     /// Content hash + data size of a profile.
     pub async fn sync_content_hash(&self, id: &str) -> Result<(String, u64)> {
-        let p = self.profile(id).await?;
+        let p = self.profile_or_trashed(id).await?;
         let record = serde_json::json!({ "os": p.os, "notes": p.notes, "machine": p.machine, "settings": p.settings });
         let data = self.d.engine.data_dir(id);
         let cache = self.sync.hashes.clone();
@@ -380,6 +380,14 @@ impl Manager {
         }
     }
 
+    /// Drop every sync bookkeeping row of a profile that is gone for good (its own state and what
+    /// was agreed with each peer).
+    pub(crate) fn sync_forget(&self, profile: &str) -> Result<()> {
+        let c = state_conn(self)?;
+        c.execute("DELETE FROM sync_state WHERE profile_id = ?1", [profile])?;
+        Ok(())
+    }
+
     fn links(&self, device: &str) -> Result<HashMap<String, LinkRow>> {
         let c = state_conn(self)?;
         let mut st = c.prepare("SELECT profile_id, peer_profile_id, last_synced_hash FROM sync_state WHERE device_id = ?1")?;
@@ -410,7 +418,10 @@ impl Manager {
         self.prune_dead().await;
         let links = self.links(device)?;
         let mut out = Vec::new();
-        for p in self.d.profiles.list().await? {
+        let trashed: Vec<cm_core::Profile> = self.d.profiles.list_trashed().await?.into_iter().map(|t| t.profile).collect();
+        let live = self.d.profiles.list().await?;
+        let all = live.into_iter().map(|p| (p, false)).chain(trashed.into_iter().map(|p| (p, true)));
+        for (p, trashed) in all {
             let closed = self.is_closed(&p.id).await;
             let (hash, size) = if closed {
                 let (h, s) = self.sync_content_hash(&p.id).await?;
@@ -432,6 +443,7 @@ impl Manager {
                 content_hash: hash,
                 size,
                 closed,
+                trashed,
             });
         }
         let me = self.device_hub().map(|h| h.me());
@@ -582,7 +594,7 @@ impl Manager {
         match req.action {
             Action::Replace => {
                 let t = req.target_id.as_deref().context("replace needs the profile to replace")?;
-                let p = self.profile(t).await?;
+                let p = self.profile_or_trashed(t).await?;
                 if !self.is_closed(t).await {
                     bail!(refuse(409, "profile_running", format!("{} is running on this device; close it first", p.name)));
                 }
@@ -713,7 +725,20 @@ impl Manager {
             Action::Copy => self.import_snapshot(zip, ImportIdMode::New, Some(copy_name(&manifest.profile.name, peer_name))).await?,
             Action::Replace => {
                 let t = target.context("replace needs the profile to replace")?;
-                self.replace_from_snapshot(zip, t, None).await?
+                // An update for a trashed profile brings it back first; if the swap fails it goes back to the trash.
+                let was_trashed = self.d.profiles.list_trashed().await?.into_iter().find(|x| x.profile.id == t);
+                if was_trashed.is_some() {
+                    self.d.profiles.restore(t).await?;
+                }
+                match self.replace_from_snapshot(zip, t, None).await {
+                    Ok(r) => r,
+                    Err(e) => {
+                        if let Some(x) = was_trashed {
+                            let _ = self.d.profiles.trash(t, &x.deleted_at).await;
+                        }
+                        return Err(e);
+                    }
+                }
             }
             Action::Skip => bail!(CmError::Invalid("nothing to apply".into())),
         };
@@ -1421,6 +1446,48 @@ mod tests {
         assert_eq!(cookies(&b, &copy.profile_id), "a4");
         assert_eq!(cookies(&b, &v.id), "b3", "my version is untouched");
         assert_eq!(rows(&a, &b).await[0].status, Status::Conflict, "a copy resolves nothing");
+        let _ = (fs::remove_dir_all(&a.root), fs::remove_dir_all(&b.root));
+    }
+
+    #[tokio::test]
+    async fn trashed_profile_is_restored_by_an_incoming_update_and_never_offered() {
+        let (a, b) = (app("svc-ta", Some("100")), app("svc-tb", Some("100")));
+        let v = a.m.create_profile(NewProfile { name: "Shop".into(), os: "mac".into() }).await.unwrap();
+        write_data(&a.engine.data_dir(&v.id), "v1");
+        transfer(&a, &b, &v.id, Action::Create, None).await.unwrap();
+
+        // B trashes it: it is not offered to A, and B keeps a link row for A
+        b.m.delete_profile(&v.id).await.unwrap();
+        let mb = b.m.sync_manifest("devA").await.unwrap();
+        assert!(mb.profiles.iter().all(|e| e.id != v.id || e.trashed), "a trashed profile is marked, never a source");
+        let back = build_rows(&mb.profiles, &a.m.sync_manifest("devB").await.unwrap().profiles, &Ok(()));
+        assert!(back.is_empty(), "the trashed profile is not offered to the peer: {back:?}");
+        assert!(b.m.sync_prepare("devA", prep_req(&v.id, a.m.sync_env().await)).await.is_err(), "nor exported");
+
+        // A changes it: for B this is an update of its trashed profile, not a new one
+        write_data(&a.engine.data_dir(&v.id), "v2");
+        let r = rows(&a, &b).await;
+        assert_eq!((r[0].status, r[0].target_id.as_deref()), (Status::SourceChanged, Some(v.id.as_str())), "{r:?}");
+        transfer(&a, &b, &v.id, Action::Replace, r[0].target_id.as_deref()).await.unwrap();
+        assert_eq!(b.m.d.profiles.list().await.unwrap().len(), 1, "no duplicate");
+        assert!(b.m.trashed_profiles().await.unwrap().profiles.is_empty(), "restored");
+        assert_eq!(cookies(&b, &v.id), "v2");
+        assert_eq!(rows(&a, &b).await[0].status, Status::Identical);
+
+        // a trashed profile whose peer never synced it (same id, unlinked) is also found, not duplicated
+        let w = a.m.create_profile(NewProfile { name: "Other".into(), os: "mac".into() }).await.unwrap();
+        write_data(&a.engine.data_dir(&w.id), "w1");
+        transfer(&a, &b, &w.id, Action::Create, None).await.unwrap();
+        b.m.delete_profile(&w.id).await.unwrap();
+        let r = rows(&a, &b).await;
+        let row = r.iter().find(|x| x.source_id == w.id).unwrap();
+        assert_eq!(row.target_id.as_deref(), Some(w.id.as_str()));
+
+        // purge forgets the sync state of the profile
+        b.m.purge_profile(&w.id).await.unwrap();
+        let n: i64 =
+            state_conn(&b.m).unwrap().query_row("SELECT COUNT(*) FROM sync_state WHERE profile_id = ?1", [&w.id], |r| r.get(0)).unwrap();
+        assert_eq!(n, 0, "sync_state rows are removed with the purged profile");
         let _ = (fs::remove_dir_all(&a.root), fs::remove_dir_all(&b.root));
     }
 

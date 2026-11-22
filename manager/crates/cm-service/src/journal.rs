@@ -293,7 +293,7 @@ impl Manager {
                     match resolve(&e, &data) {
                         Ok(Resolution::Forward) => {
                             if let Some(rec) = &e.record
-                                && self.d.profiles.get(&rec.id).await?.is_some()
+                                && self.profile_or_trashed(&rec.id).await.is_ok()
                             {
                                 self.d.profiles.update(rec).await?;
                             }

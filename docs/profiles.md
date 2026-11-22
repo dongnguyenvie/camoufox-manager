@@ -50,6 +50,9 @@ while it is in the trash. Trashed profiles do not appear in the list, scheduled 
 - **Delete forever** removes the record and its data folder.
 - **Empty trash** deletes everything in the trash.
 
+Deleting forever also forgets the profile's sync bookkeeping. If a paired device sends an update for a profile
+that is in the trash, the profile is restored and updated (see [sync](sync.md)).
+
 Trashed profiles are kept for `profiles.trash_days` days (default 7, maximum 365). Set it to `0` to delete
 immediately, with no trash. Expired profiles are purged at startup and then every hour.
 

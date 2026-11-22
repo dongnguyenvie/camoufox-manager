@@ -67,6 +67,9 @@ pub struct ManifestEntry {
     pub size: u64,
     pub closed: bool,
     pub link: Option<LinkInfo>,
+    /// In the sender's trash: never a source, but still the target an incoming update restores.
+    #[serde(default)]
+    pub trashed: bool,
 }
 
 /// Answer of `GET /sync/v1/profiles`.
@@ -197,7 +200,7 @@ pub struct Row {
 /// the source are blocked; a running target profile blocks everything that would change it.
 pub fn build_rows(source: &[ManifestEntry], target: &[ManifestEntry], compat: &Result<(), String>) -> Vec<Row> {
     let mut rows = Vec::new();
-    for s in source {
+    for s in source.iter().filter(|s| !s.trashed) {
         // 1. what the source remembers, 2. what the target remembers, 3. the same id, never synced
         let by_source = s.link.as_ref().and_then(|l| target.iter().find(|t| t.id == l.peer_profile_id));
         let by_target = || target.iter().find(|t| t.link.as_ref().is_some_and(|l| l.peer_profile_id == s.id));
@@ -262,6 +265,7 @@ mod tests {
             size: 10,
             closed: hash.is_some(),
             link: link.map(|(p, h)| LinkInfo { peer_profile_id: p.into(), last_synced_hash: h.map(str::to_owned) }),
+            trashed: false,
         }
     }
 
@@ -360,5 +364,18 @@ mod tests {
         // the gate blocks every row with its reason
         let rows = build_rows(&[entry("a", Some("h"), None)], &[], &Err("different Camoufox builds".into()));
         assert_eq!(rows[0].blocked.as_ref().unwrap().code, "incompatible");
+    }
+
+    #[test]
+    fn trashed_entries_are_targets_never_sources() {
+        let mut gone = entry("a", Some("h0"), Some(("a", Some("h0"))));
+        gone.trashed = true;
+        let live = entry("a", Some("h2"), Some(("a", Some("h0"))));
+        assert!(
+            build_rows(std::slice::from_ref(&gone), std::slice::from_ref(&live), &Ok(())).is_empty(),
+            "a trashed profile is not offered"
+        );
+        let rows = build_rows(&[live], &[gone], &Ok(()));
+        assert_eq!((rows[0].status, rows[0].target_id.as_deref()), (Status::SourceChanged, Some("a")));
     }
 }

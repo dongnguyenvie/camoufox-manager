@@ -620,6 +620,7 @@ impl Manager {
         let kept = mode == ImportIdMode::KeepIfFree
             && valid_id(&sp.id)
             && self.d.profiles.get(&sp.id).await?.is_none()
+            && !self.d.profiles.list_trashed().await?.iter().any(|t| t.profile.id == sp.id)
             && !self.d.engine.data_dir(&sp.id).exists();
         let id = if kept { sp.id.clone() } else { new_id()? };
 
