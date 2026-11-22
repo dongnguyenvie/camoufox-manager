@@ -752,10 +752,9 @@ impl Manager {
     }
 
     fn sheet_dir(&self) -> Result<PathBuf> {
-        use std::os::unix::fs::PermissionsExt;
         let dir = self.cfg.data_dir.join("tmp");
         fs::create_dir_all(&dir)?;
-        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
+        crate::transfer::set_mode(&dir, 0o700)?;
         Ok(dir)
     }
 

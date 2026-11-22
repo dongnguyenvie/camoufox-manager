@@ -5,12 +5,51 @@
 use crate::codec::{hex, random, sha256_hex, unhex};
 use anyhow::{Context, Result, bail};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+#[cfg(unix)]
+use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::{
     fs,
     io::Write,
-    os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
 };
+
+/// Set unix permission bits; a no-op on Windows (the per-user profile ACL applies).
+pub(crate) fn set_mode(path: &Path, mode: u32) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(mode))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (path, mode);
+        Ok(())
+    }
+}
+
+/// `OpenOptions::mode` stand-in so the call sites stay identical on Windows.
+#[cfg(not(unix))]
+pub(crate) trait OpenOptionsExt {
+    fn mode(&mut self, _mode: u32) -> &mut Self;
+}
+#[cfg(not(unix))]
+impl OpenOptionsExt for fs::OpenOptions {
+    fn mode(&mut self, _mode: u32) -> &mut Self {
+        self
+    }
+}
+
+fn loose_perms(path: &Path) -> std::io::Result<bool> {
+    #[cfg(unix)]
+    {
+        Ok(fs::metadata(path)?.permissions().mode() & 0o077 != 0)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Ok(false)
+    }
+}
 
 pub const KEY_DIR: &str = "sync";
 pub const KEY_FILE: &str = "device.key";
@@ -71,13 +110,13 @@ impl Identity {
     pub fn load_or_create(data_dir: &Path) -> Result<Identity> {
         let dir = data_dir.join(KEY_DIR);
         fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
-        fs::set_permissions(&dir, fs::Permissions::from_mode(0o700))?;
+        set_mode(&dir, 0o700)?;
         let path = dir.join(KEY_FILE);
         match fs::read_to_string(&path) {
             Ok(text) => {
                 // Tighten permissions if someone loosened them.
-                if fs::metadata(&path)?.permissions().mode() & 0o077 != 0 {
-                    fs::set_permissions(&path, fs::Permissions::from_mode(0o600))?;
+                if loose_perms(&path)? {
+                    set_mode(&path, 0o600)?;
                 }
                 let Some(seed) = unhex(text.trim()).and_then(|b| <[u8; 32]>::try_from(b).ok()) else {
                     bail!("{} is not a device key (expected 64 hex chars)", path.display());
@@ -127,8 +166,8 @@ mod tests {
         let a = Identity::load_or_create(&dir).unwrap();
         let b = Identity::load_or_create(&dir).unwrap();
         assert_eq!(a.public_hex(), b.public_hex(), "same key on reload");
-        let mode = fs::metadata(Identity::key_path(&dir)).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode, 0o600);
+        #[cfg(unix)]
+        assert_eq!(fs::metadata(Identity::key_path(&dir)).unwrap().permissions().mode() & 0o777, 0o600);
         assert_eq!(a.id(), device_id(&unhex(a.public_hex()).unwrap().try_into().unwrap()));
         let sig = a.sign(b"hello");
         assert!(verify(a.public_hex(), b"hello", &sig));
