@@ -1,116 +1,119 @@
 # Camoufox Manager
 
-**Camoufox Manager** (thư mục `manager/`) là ứng dụng macOS **local-first** để quản lý nhiều profile trình duyệt [Camoufox](https://github.com/daijro/camoufox) (Firefox anti-detect): tạo profile, gán proxy riêng, mở/đóng browser, xem fingerprint và dữ liệu profile. Mọi thứ nằm trên máy bạn, không cần tài khoản cloud.
+A local, single-user macOS app for managing many [Camoufox](https://github.com/daijro/camoufox)
+(Firefox anti-detect) browser profiles, written in Rust. Each profile keeps its own fingerprint, proxy,
+cookies and data. Everything runs on your machine, binds to `127.0.0.1` only, and needs no cloud account.
 
-Web UI và proxy trung gian chỉ lắng nghe trên `127.0.0.1`.
+## Features
 
-## Tính năng
+- Create and delete profiles. The hardware fingerprint is pinned at creation and kept on every launch.
+- Assign proxies from a proxy library; check IP, country, timezone and coordinates.
+- Start/stop profiles; the Playwright WebSocket endpoint is shown for automation.
+- Geography (timezone, locale, geolocation, WebRTC IP) follows the assigned proxy at each launch.
+- Local fail-closed proxy relay: browsers only see `127.0.0.1:<port>`, credentials stay in the app.
+- Cookie import/export; profile transfer (zip export/import, clone, bulk create).
+- Tags, groups, saved views, bulk actions; spreadsheet-style profile table (copy as TSV).
+- Templates and browser extensions; scheduled launches; xlsx/csv import and export.
+- Agent leases, a headless `serve` mode, a CLI with an API key, and a doctor report.
+- Device sync between two of your own Macs over Tailscale (see [docs/sync.md](docs/sync.md)).
+- UI in English (default) and Vietnamese, switchable in settings.
 
-- Tạo/xoá profile; fingerprint sinh **một lần** lúc tạo (theo OS bạn chọn) và giữ nguyên mỗi lần mở.
-- Gán/bỏ gán proxy cho từng profile, kiểm tra IP, quốc gia, múi giờ, tọa độ của proxy.
-- Khi Start, tự áp timezone, geolocation và IP WebRTC theo proxy.
-- Start/Stop profile; cookie và đăng nhập được giữ trong profile Firefox persistent.
-- Mở nhanh thư mục dữ liệu của profile; sao chép bảng dạng TSV để dán vào Excel/Sheets.
-- Chạy dưới dạng app macOS hoặc server local không cửa sổ.
+## Requirements
 
-## Mô hình bảo mật
+- macOS 11 or later and a Rust toolchain (the app is built from source).
+- [uv](https://docs.astral.sh/uv/) and the Camoufox setup script (optional, see below).
+- For device sync only: the Tailscale app.
 
-```text
-Camoufox  ──►  127.0.0.1:31000+  ──►  Upstream proxy
-(không có credential)   (Camoufox Manager thêm Proxy-Authorization)
-```
+## Install Camoufox (optional)
 
-- Mỗi upstream proxy ánh xạ sang một cổng local từ `31000`; browser chỉ thấy `127.0.0.1:<port>`, user/pass nằm trong tiến trình app.
-- Fail-closed: upstream lỗi thì kết nối bị đóng, không đi thẳng bằng IP thật.
-- Không commit `proxies.txt` hay `.env` vào Git.
-
-## Yêu cầu
-
-- macOS 11 trở lên, Rust toolchain (build từ source);
-- [uv](https://docs.astral.sh/uv/) để cài Camoufox (tuỳ chọn, xem dưới);
-- danh sách HTTP proxy, mỗi dòng `ip:port:user:password`.
-
-## Cài Camoufox (tuỳ chọn)
-
-Camoufox không bắt buộc để build và mở app: nếu chưa cài, app vẫn khởi động, báo "chưa cài" kèm gợi ý và tắt nút tạo/mở profile. Để cài:
+Camoufox is not required to build or open the app. Without it the app starts, reports that the engine
+is not installed, and disables the create and start actions. To install it:
 
 ```bash
 manager/camoufox/setup.sh
 ```
 
-Script tạo venv riêng, cài `camoufox` bản cố định và tải trình duyệt Camoufox (tổng khoảng 2,4 GB, vào `~/Library/Caches/camoufox`).
+The script creates a dedicated venv with `uv`, installs the pinned `camoufox` package and downloads the
+browser (about 2.4 GB into the Camoufox cache). Set `CAMOUFOX_VENV=/path/to/venv` to put the venv
+elsewhere, and then point `CAMOUFOX_PYTHON` at its Python.
 
-## Cấu hình
-
-Proxy lưu trong cơ sở dữ liệu SQLite của app. Để thêm proxy (trước khi có trang Proxy library đầy đủ),
-đặt file `~/Library/Application Support/camoufox-manager/proxies.txt` rồi mở lại app: các dòng mới
-được nhập vào DB (trùng thì bỏ qua) và file được đổi tên thành `proxies.txt.bak`.
-
-```text
-127.0.0.1:8080:username:password
-127.0.0.2:8080:username:password
-```
-
-Biến môi trường (đặt trong `~/Library/Application Support/camoufox-manager/.env` hoặc shell):
-
-| Biến | Mặc định | Ý nghĩa |
-| --- | --- | --- |
-| `PROXY_FILE` | `<thư mục dữ liệu>/proxies.txt` | File proxy cũ, chỉ dùng cho lần nhập dữ liệu đầu tiên |
-| `CM_PORT` | `7878` | Cổng UI/API (`serve`; cửa sổ app dùng cổng ngẫu nhiên nếu không đặt) |
-| `CM_PROXY_BASE_PORT` | `31000` | Cổng local proxy đầu tiên (proxy #N dùng `base + N - 1`) |
-| `CAMOUFOX_PYTHON` | `<thư mục dữ liệu>/camoufox/venv/bin/python` | Python của venv Camoufox |
-| `CAMOUFOX_HEADLESS` | tắt | `1` để mở browser không cửa sổ |
-
-## Chạy từ source
+## Build and run
 
 ```bash
 cd manager
-cargo run --release            # cửa sổ app
-cargo run --release -- serve   # headless, mở http://127.0.0.1:7878
+cargo run --release            # desktop window
+cargo run --release -- serve   # headless server on http://127.0.0.1:7878
+cargo run --release -- status  # CLI (see docs/settings-api-cli.md)
 ```
 
-Khi Start, cột "Playwright (ws)" là endpoint WebSocket theo **giao thức Playwright** (không phải CDP). Ví dụ Python: `browser = playwright.firefox.connect(ws); page = browser.contexts[0].pages[0]`; `contexts[0]` chính là profile persistent.
-
-## Đóng gói
+Package a macOS app bundle:
 
 ```bash
 cd manager
 ./packaging/bundle-macos.sh    # -> manager/dist/Camoufox Manager.app
 ```
 
-`.env` và dữ liệu không nằm trong `.app`; app đọc từ thư mục dữ liệu bên dưới.
+## Configuration
 
-## Dữ liệu lưu ở đâu
+Data lives in `~/Library/Application Support/camoufox-manager/` (the database is
+`camoufox-manager.db`). Environment variables can be set in the shell or in a `.env` file in that folder.
 
-Tất cả trong `~/Library/Application Support/camoufox-manager/`:
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `CM_PORT` | `7878` | UI/API port for `serve` and the CLI. The desktop window uses a random port unless this is set. |
+| `CM_PROXY_BASE_PORT` | `31000` | First local relay port; proxy N uses `base + N - 1`. |
+| `CM_SYNC_PORT` | `7879` | Sync listener on `127.0.0.1` (never serves the UI or `/api`). |
+| `CM_SYNC_HTTPS_PORT` | `8443` | HTTPS port used for `tailscale serve`. |
+| `CM_SYNC_ADVERTISE` | unset | `host:port` advertised as plain HTTP instead of the tailnet. Tests and development only. |
+| `CM_SYNC_CHUNK_SIZE` | built-in | Transfer chunk size in bytes. Tests and development only. |
+| `CM_TAILSCALE_BIN` | unset | Path to the `tailscale` binary; otherwise `PATH` and usual locations are searched. |
+| `CAMOUFOX_PYTHON` | `<data dir>/camoufox/venv/bin/python` | Python of the Camoufox venv. |
+| `CAMOUFOX_HEADLESS` | off | `1` launches browsers without a window. |
+| `PROXY_FILE` | `<data dir>/proxies.txt` | Legacy proxy file, imported on first start. |
+| `CM_API_KEY` | unset | API key the CLI sends as `X-API-Key`. |
 
-| Dữ liệu | Vị trí |
-| --- | --- |
-| Profile, proxy, gán proxy, cài đặt | `camoufox-manager.db` (SQLite) |
-| Biến môi trường | `.env` |
-| Dữ liệu browser của profile | `camoufox/profiles/<profile-id>/user-data/` |
-| Helper Python (app tự ghi) | `camoufox/helper/` |
-| Python venv | `camoufox/venv` |
+## Tests and gates
 
-## Cấu trúc mã
+```bash
+cd manager
+./gates.sh        # fmt --check, clippy -D warnings, build, test, node --check on UI scripts
+./e2e/run.sh      # end-to-end scenarios (not part of gates.sh); ./e2e/run.sh 1 3 5 selects some
+```
 
-`manager/` là Cargo workspace (xem `tasks/CM-1-rust-profile-manager/plan.md`):
+`e2e/run.sh` uses private temporary HOMEs and headless browsers, and needs the real Camoufox venv.
+
+## Crate layout
 
 ```text
 manager/
-  crates/cm-core/            kiểu dữ liệu + trait (Engine, *Repo, ProxyChecker, Clock), không I/O
-  crates/cm-store/           SQLite: repo, migration (src/migrations/), nhập dữ liệu cũ
-  crates/cm-relay/           local proxy fail-closed + kiểm tra proxy
-  crates/cm-engine-camoufox/ Engine Camoufox + helper Python (python/helper/)
-  crates/cm-service/         logic (Manager), mỗi mảng một module
-  crates/cm-api/             REST API (axum), mỗi mảng một module
-  crates/cm-ui/              UI Vue 3 + Tailwind (assets/), CSS build bằng manager/ui-build.sh
-  apps/camoufox-manager/     binary: cửa sổ app, `serve`, CLI — chỉ nối các phần
-  gates.sh                   fmt + clippy + build + test
+  crates/cm-core/             domain types and traits (no I/O)
+  crates/cm-store/            SQLite repositories and migrations
+  crates/cm-relay/            local fail-closed proxy relay and proxy checks
+  crates/cm-engine-camoufox/  Camoufox engine and its Python helper
+  crates/cm-service/          use-cases (Manager), one module per area
+  crates/cm-api/              REST API (axum), one module per area
+  crates/cm-sync/             device pairing, request signing, diff, chunked transfer
+  crates/cm-tailscale/        Tailscale probe and serve helper
+  crates/cm-ui/               Vue 3 + Tailwind UI assets
+  apps/camoufox-manager/      binary: desktop window, serve, CLI (wiring only)
+  gates.sh                    the gate run for every change
 ```
 
-## Lưu ý
+## Documentation
 
-- Chỉ dùng với profile, tài khoản và hệ thống bạn có quyền quản lý.
-- Bảo vệ thư mục dữ liệu vì chứa credential proxy; không expose cổng local qua tunnel/port forwarding khi chưa có xác thực.
-- Kiểm tra IP/geo của proxy trước khi Start.
+- [docs/profiles.md](docs/profiles.md): profiles, pinned fingerprint, geography, canvas modes
+- [docs/proxies.md](docs/proxies.md): proxy library, relay, fail-closed behaviour
+- [docs/cookies.md](docs/cookies.md): cookie import and export
+- [docs/transfer.md](docs/transfer.md): import/export, clone, templates and extensions
+- [docs/organization.md](docs/organization.md): tags, groups, saved views, sheets
+- [docs/scheduling.md](docs/scheduling.md): scheduled launches
+- [docs/settings-api-cli.md](docs/settings-api-cli.md): settings, API keys, CLI
+- [docs/doctor.md](docs/doctor.md): diagnostics and notifications
+- [docs/sync.md](docs/sync.md): device sync user guide
+
+## Notes
+
+- Use only with profiles, accounts and systems you are allowed to manage.
+- The data folder holds proxy credentials. Protect it, and do not expose the local port through a tunnel or
+  port forward without authentication.
+- Check a proxy's IP and geography before starting a profile.

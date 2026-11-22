@@ -1,4 +1,4 @@
-"""Vẽ icon app (1024px) rồi đóng thành AppIcon.icns. Chạy: python3 packaging/make_icon.py"""
+"""Draw the app icon (1024px) and pack it into AppIcon.icns. Run: python3 packaging/make_icon.py"""
 import os, subprocess, sys, tempfile
 from PIL import Image, ImageDraw, ImageFilter
 
@@ -6,7 +6,7 @@ S = 1024
 here = os.path.dirname(os.path.abspath(__file__))
 
 img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
-# nền bo góc kiểu macOS, gradient tím → xanh
+# macOS-style rounded background, gradient purple to blue
 grad = Image.new("RGBA", (S, S))
 gd = ImageDraw.Draw(grad)
 for y in range(S):
@@ -20,7 +20,7 @@ img.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(18)))
 img.paste(grad, (0, 0), mask)
 
 d = ImageDraw.Draw(img)
-# 3 "profile" xếp hàng (giống bảng trong app), mỗi hàng có chấm trạng thái
+# 3 "profile" rows stacked (like the table in the app), each row with a status dot
 for i, y in enumerate((330, 500, 670)):
     d.rounded_rectangle([250, y - 58, 774, y + 58], radius=40, fill=(255, 255, 255, 235 if i == 0 else 150))
     d.ellipse([288, y - 26, 340, y + 26], fill=(34, 197, 94, 255) if i == 0 else (99, 102, 241, 200))

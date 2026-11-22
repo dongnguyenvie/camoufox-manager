@@ -1,16 +1,16 @@
 target/
 .env
 
-# danh sách proxy có credentials
+# proxy lists with credentials
 *.proxies.txt
 
-# app đã đóng gói
+# packaged app
 dist/
 
-# danh sách proxy có credentials (không bao giờ commit)
+# proxy lists with credentials (never commit)
 a.md
 proxies.txt
 *.proxies.txt
 
-# worktree của subagent
+# subagent worktrees
 .claude/

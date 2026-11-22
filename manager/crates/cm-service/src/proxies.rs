@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet};
 
 /// A cached check younger than this is reused at start; older → check again (rotating IPs).
 const CHECK_TTL_SECS: u64 = 600;
-/// Import limits: đủ cho danh sách proxy lớn khi scale, vẫn chặn input vô lý.
+/// Import limits: large enough for big proxy lists, still rejects absurd input.
 const IMPORT_MAX_LINES: usize = 10_000;
 const IMPORT_MAX_CHARS: usize = 2_000_000;
 /// Profiles per bulk / sequential assignment.

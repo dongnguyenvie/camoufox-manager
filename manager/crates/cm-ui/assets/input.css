@@ -6,7 +6,7 @@
 @source "./components/*.js";
 @source "./pages/*.js";
 
-/* Màu theo biến CSS: đổi sáng/tối chỉ cần đổi biến ở :root */
+/* Colors come from CSS variables: change light/dark by changing the variables on :root */
 :root {
   --bg: #f5f6f8; --panel: #ffffff; --panel-2: #f2f4f7; --line: #e4e7ec; --row-hover: #fafbfc;
   --text: #121620; --muted: #5f6775; --faint: #9aa1ad;
@@ -82,7 +82,7 @@
   .list-tbl tbody tr:hover td { background: var(--row-hover); }
   .skel { height: 11px; border-radius: 5px; background: linear-gradient(90deg, var(--panel-2), var(--line), var(--panel-2)); background-size: 200% 100%; animation: sk 1.2s infinite; }
 
-  /* Bảng tính: cột/hàng tiêu đề dính (sticky) khó viết bằng utility nên gom lại đây */
+  /* Spreadsheet grid: sticky header rows/columns are hard to write as utilities, so they are grouped here */
   .grid-tbl { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: max-content; font-size: 12.5px; }
   .grid-tbl th, .grid-tbl td { height: 32px; padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
   .grid-tbl thead th { position: sticky; z-index: 3; background: var(--panel-2); color: var(--muted); font-weight: 640; }
@@ -93,7 +93,7 @@
   .grid-tbl tbody tr:hover td { background: var(--row-hover); }
   .grid-tbl tbody tr.live td.c-name { box-shadow: inset 3px 0 0 var(--ok); }
   .grid-tbl .gs { border-left: 2px solid var(--line); }
-  /* cột cố định: # và Tên bên trái, hành động bên phải */
+  /* fixed columns: # and Name on the left, actions on the right */
   .grid-tbl .s0 { position: sticky; left: 0; z-index: 2; }
   .grid-tbl .s1 { position: sticky; left: 44px; z-index: 2; border-right: 2px solid var(--line); }
   .grid-tbl .sr { position: sticky; right: 0; z-index: 2; border-left: 2px solid var(--line); border-right: none; text-align: center; padding: 0 8px; cursor: default; }
