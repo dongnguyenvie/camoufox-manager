@@ -75,12 +75,17 @@ pub struct Config {
     pub db_path: Option<PathBuf>,
 }
 
+/// (proxy id, filters local network)
+type RelayKey = (ProxyId, bool);
+
 /// A browser this app started.
 struct Running {
     ws: String,
     proxy: Option<ProxyId>,
     port: Option<u16>,
     started_at: u64,
+    /// Whether its relay filters local-network targets (profile setting, default on).
+    block_local: bool,
 }
 
 pub struct Manager {
@@ -91,8 +96,9 @@ pub struct Manager {
     leases: std::sync::Mutex<HashMap<String, lease::Lease>>,
     /// Scheduler runtime state (phase 10).
     sched: scheduler::SchedState,
-    /// Active relays by proxy id.
-    relays: Mutex<HashMap<ProxyId, (u16, JoinHandle<()>)>>,
+    /// Active relays by (proxy id, filters local network). Blocking relays take the proxy's
+    /// fixed port; the non-blocking variant (profile opted out) gets an ephemeral one.
+    relays: Mutex<HashMap<RelayKey, (u16, JoinHandle<()>)>>,
     /// Set once the snapshot apply journal has been recovered (phase 15).
     journal_ready: tokio::sync::OnceCell<usize>,
     /// Read-only diagnostics probes (phase 19, attached by the binary).

@@ -103,6 +103,17 @@ pub fn pref_overrides(o: &LaunchOptions) -> BTreeMap<String, Value> {
         set("privacy.clearOnShutdown.sessions", false);
         set("privacy.clearOnShutdown_v2.cookiesAndStorage", false);
     }
+    if o.block_local_network {
+        if o.proxy.is_some() {
+            // Firefox sends localhost / no_proxies_on hosts direct even with a proxy; these make
+            // everything go through the relay, which refuses local targets.
+            set("network.proxy.allow_hijacking_localhost", true);
+            p.insert("network.proxy.no_proxies_on".into(), Value::String(String::new()));
+        }
+        // Firefox's own Local Network Access gate (ignored by builds without it).
+        p.insert("network.lna.enabled".into(), Value::Bool(true));
+        p.insert("network.lna.blocking".into(), Value::Bool(true));
+    }
     p.extend(o.custom_prefs.clone());
     p
 }
@@ -197,6 +208,22 @@ mod tests {
         let i = a.iter().position(|v| v == "--prefs").unwrap();
         let parsed: Value = serde_json::from_str(&a[i + 1]).unwrap();
         assert_eq!(parsed["browser.startup.homepage"], json!("about:blank"));
+    }
+
+    #[test]
+    fn block_local_network_prefs() {
+        let mut o = LaunchOptions { block_local_network: true, proxy: Some(("127.0.0.1".into(), 31000)), ..Default::default() };
+        let p = pref_overrides(&o);
+        assert_eq!(p["network.proxy.allow_hijacking_localhost"], json!(true));
+        assert_eq!(p["network.proxy.no_proxies_on"], json!(""));
+        assert_eq!(p["network.lna.enabled"], json!(true));
+        o.proxy = None;
+        let p = pref_overrides(&o);
+        assert!(!p.contains_key("network.proxy.no_proxies_on"), "no proxy: nothing to hijack");
+        assert_eq!(p["network.lna.blocking"], json!(true));
+        o.custom_prefs.insert("network.lna.blocking".into(), json!(false));
+        assert_eq!(pref_overrides(&o)["network.lna.blocking"], json!(false), "custom prefs win");
+        assert!(pref_overrides(&LaunchOptions { proxy: Some(("h".into(), 1)), ..Default::default() }).is_empty());
     }
 
     #[test]

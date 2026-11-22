@@ -613,7 +613,7 @@ mod tests {
             .await
             .unwrap();
         let p = m.proxy(px.id).await.unwrap();
-        m.ensure_relay(&p).await.unwrap();
+        m.ensure_relay(&p, true).await.unwrap();
         let r = m.doctor(DoctorOptions::default()).await.unwrap();
         assert_eq!(by_id(&r, "port.proxy").status, Status::Ok);
     }

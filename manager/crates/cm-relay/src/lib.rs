@@ -17,6 +17,7 @@
 //! ([`IpApiChecker`], phase 2).
 
 mod check;
+mod filter;
 mod http;
 mod https;
 mod socks4a;
@@ -25,14 +26,16 @@ mod target;
 mod url;
 
 pub use check::IpApiChecker;
+pub use filter::{is_local, is_local_v4, is_local_v6};
 pub use target::Dest;
 pub use url::parse_proxy_url;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use cm_core::{Proxy, ProxyScheme};
 use rustls::{ClientConfig, pki_types::ServerName};
 use std::{fmt, sync::Arc, time::Duration};
 use tokio::{
+    io::AsyncWriteExt,
     net::{TcpListener, TcpStream},
     time::timeout,
 };
@@ -84,18 +87,24 @@ pub async fn bind(port: u16) -> Result<TcpListener> {
 
 /// Accept loop; spawn it as a task and abort the task to stop the relay.
 pub async fn run(listener: TcpListener, up: Upstream) {
-    run_with_tls(listener, up, https::default_config()).await
+    run_with_tls(listener, up, https::default_config(), false).await
+}
+
+/// [`run`] that, when `block_local` is set, refuses browser requests aimed at loopback, private,
+/// link-local or CGNAT addresses and `localhost` names (answered `403`, nothing forwarded).
+pub async fn run_filtered(listener: TcpListener, up: Upstream, block_local: bool) {
+    run_with_tls(listener, up, https::default_config(), block_local).await
 }
 
 /// [`run`] with an explicit TLS client config for `https` upstreams (tests inject a root).
-pub(crate) async fn run_with_tls(listener: TcpListener, up: Upstream, tls: Arc<ClientConfig>) {
+pub(crate) async fn run_with_tls(listener: TcpListener, up: Upstream, tls: Arc<ClientConfig>, block_local: bool) {
     let up = Arc::new(up);
     loop {
         let Ok((client, _)) = listener.accept().await else { continue };
         let up = up.clone();
         let tls = tls.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle(client, &up, &tls).await {
+            if let Err(e) = handle(client, &up, &tls, block_local).await {
                 eprintln!("[relay {}] {e:#}", up.label());
             }
         });
@@ -112,8 +121,16 @@ async fn connect_upstream(up: &Upstream) -> Result<TcpStream> {
 }
 
 /// One browser connection. Every error drops it (fail-closed).
-async fn handle(mut client: TcpStream, up: &Upstream, tls: &Arc<ClientConfig>) -> Result<()> {
+async fn handle(mut client: TcpStream, up: &Upstream, tls: &Arc<ClientConfig>, block_local: bool) -> Result<()> {
     let Some(head) = target::read_head(&mut client).await? else { return Ok(()) };
+    if block_local {
+        // Only the browser's target is checked (never the upstream, which may be on a LAN).
+        let (dest, _) = head.dest()?;
+        if filter::is_local(&dest) {
+            let _ = client.write_all(b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\nContent-Length: 0\r\n\r\n").await;
+            bail!("blocked local-network target");
+        }
+    }
     match up.scheme {
         ProxyScheme::Http => {
             let mut s = connect_upstream(up).await?;

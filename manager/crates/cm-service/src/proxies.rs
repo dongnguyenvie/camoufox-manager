@@ -567,24 +567,33 @@ impl Manager {
     }
 
     /// Make sure the relay for proxy `id` is listening; returns its port.
-    pub(crate) async fn ensure_relay(&self, p: &Proxy) -> Result<u16> {
+    /// `block_local` = refuse the browser's requests to loopback / LAN / link-local targets.
+    pub(crate) async fn ensure_relay(&self, p: &Proxy, block_local: bool) -> Result<u16> {
         let mut relays = self.relays.lock().await;
-        if let Some((port, h)) = relays.get(&p.id)
+        if let Some((port, h)) = relays.get(&(p.id, block_local))
             && !h.is_finished()
         {
             return Ok(*port);
         }
-        let Some(port) = self.relay_port(p.id) else { bail!("no local port left for proxy #{}", p.id) };
+        let port = if block_local {
+            let Some(port) = self.relay_port(p.id) else { bail!("no local port left for proxy #{}", p.id) };
+            port
+        } else {
+            0
+        };
         let listener = cm_relay::bind(port).await?;
-        relays.insert(p.id, (port, tokio::spawn(cm_relay::run(listener, p.into()))));
+        let port = listener.local_addr()?.port();
+        relays.insert((p.id, block_local), (port, tokio::spawn(cm_relay::run_filtered(listener, p.into(), block_local))));
         Ok(port)
     }
 
-    /// Stop the relay of proxy `id` unless a running profile still uses it.
+    /// Stop the relays of proxy `id` that no running profile still uses.
     pub(crate) async fn release_relay(&self, id: ProxyId) {
-        let in_use = self.running.lock().await.values().any(|r| r.proxy == Some(id));
-        if !in_use && let Some((_, h)) = self.relays.lock().await.remove(&id) {
-            h.abort();
+        for block in [true, false] {
+            let in_use = self.running.lock().await.values().any(|r| r.proxy == Some(id) && r.block_local == block);
+            if !in_use && let Some((_, h)) = self.relays.lock().await.remove(&(id, block)) {
+                h.abort();
+            }
         }
     }
 }
