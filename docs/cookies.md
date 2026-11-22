@@ -9,3 +9,15 @@ Cookies can be imported into and exported from a profile.
   Cookies that cannot be parsed are reported and skipped.
 
 Cookies contain login sessions, so treat exported files as secrets.
+
+## Cookies through Playwright
+
+`firefox.connect(ws_endpoint)` gives the profile's own context as `browser.contexts[0]`;
+`context.add_cookies()` and `context.cookies()` work on it (and on a context made with
+`browser.new_context()`, which is separate and not saved in the profile). Two things look like
+"no cookies":
+
+- A cookie with a past `expires` is dropped at once. `expires` is in seconds since the epoch, not
+  milliseconds.
+- A cookie added without `expires` is a session cookie: it is visible while the browser runs but
+  is not kept after stop and relaunch. Give it a future `expires` to keep it in the profile.

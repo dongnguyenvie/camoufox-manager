@@ -22,3 +22,13 @@ A template is a saved profile configuration. Save a profile as a template, or cr
 ## Extensions
 
 Browser extensions are managed separately and can be attached to profiles from the profile table.
+
+Notes when checking that an extension works (measured on Windows 11 and Camoufox 0.5.9):
+
+- Extensions are installed when the profile starts; a change of the assignment needs a restart.
+  No second restart is needed.
+- The add-on manifest must have a Gecko id (`browser_specific_settings.gecko.id`).
+- A content script with `run_at: document_idle` runs after the page's load event. A script that
+  reads the page right after `page.goto()` can see nothing yet; wait or poll for a second.
+- Content scripts do not run in a page that was already open before the add-on started, nor in
+  `about:blank` (unless the manifest sets `match_about_blank`). Navigate to a page after launch.
