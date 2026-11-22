@@ -6,7 +6,8 @@
 use super::{ApiResult, Shared, ok};
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    body::Bytes,
+    extract::{DefaultBodyLimit, Path, State},
     http::HeaderMap,
     routing::{delete, get, post},
 };
@@ -77,6 +78,12 @@ async fn empty_trash(State(m): State<Shared>) -> ApiResult {
     ok(json!({ "purged": m.empty_trash().await? }))
 }
 
+/// CM-3.4: parse a Netscape `bookmarks.html` body into a bookmark list (nothing is stored).
+async fn import_bookmarks(body: Bytes) -> ApiResult {
+    let html = String::from_utf8_lossy(&body);
+    ok(json!({ "bookmarks": cm_service::bookmarks::validate(cm_service::bookmarks::parse_netscape(&html))? }))
+}
+
 async fn reveal(State(m): State<Shared>, Path(id): Path<String>) -> ApiResult {
     std::process::Command::new(super::opener()).arg(m.profile_dir(&id).await?).spawn()?;
     ok(json!({ "ok": true }))
@@ -95,4 +102,5 @@ pub fn routes() -> Router<Shared> {
         .route("/api/profiles/{id}/restore", post(restore_profile))
         .route("/api/profiles/{id}/purge", delete(purge_profile))
         .route("/api/profiles/{id}/reveal", post(reveal))
+        .route("/api/bookmarks/import", post(import_bookmarks).layer(DefaultBodyLimit::max(16 << 20)))
 }

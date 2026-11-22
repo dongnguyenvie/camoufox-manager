@@ -85,6 +85,8 @@ pub struct LaunchOptions {
     pub data: crate::profile::DataSaving,
     /// Extra browser prefs from the profile, applied last (already validated).
     pub custom_prefs: std::collections::BTreeMap<String, serde_json::Value>,
+    /// Bookmarks for the managed toolbar folder, synced into `places.sqlite` before the browser opens.
+    pub bookmarks: Vec<crate::profile::Bookmark>,
 }
 
 /// A running browser, remote-controllable at `ws_url` (protocol: [`Engine::ws_protocol`]).

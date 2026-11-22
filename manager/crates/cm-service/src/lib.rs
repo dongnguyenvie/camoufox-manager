@@ -24,6 +24,7 @@
 //! [`Manager::set_device_hub`]; routes and the sync engine reach it through [`Manager::device_hub`]
 //! (`None` when it could not be created, e.g. the key file is unreadable: the rest of the app works).
 
+pub mod bookmarks;
 pub mod cookies;
 pub mod doctor;
 pub mod journal;
