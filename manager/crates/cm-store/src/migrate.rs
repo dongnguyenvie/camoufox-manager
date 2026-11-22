@@ -20,6 +20,7 @@
 //! | `0011_sync_state.sql` | 17 Per-profile per-peer sync state |
 //! | `0012_trash.sql` | CM-3.1 Trash (soft delete) |
 //! | `0013_proxy_rotate.sql` | CM-3.2 Proxy change-IP link |
+//! | `0014_default_bookmarks.sql` | Default bookmarks for existing profiles |
 
 use anyhow::{Context, Result};
 use rusqlite::{Connection, params};
@@ -51,6 +52,7 @@ pub const MIGRATIONS: &[Migration] = &[
     migration!(11, "0011_sync_state.sql"),
     migration!(12, "0012_trash.sql"),
     migration!(13, "0013_proxy_rotate.sql"),
+    migration!(14, "0014_default_bookmarks.sql"),
 ];
 
 /// Only comments / whitespace?
@@ -88,6 +90,14 @@ pub fn run(conn: &mut Connection) -> Result<Vec<&'static str>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_bookmarks_migration_matches_core() {
+        let sql = include_str!("migrations/0014_default_bookmarks.sql");
+        let lit = sql.split("json('").nth(1).unwrap().split("')").next().unwrap();
+        let got: Vec<cm_core::Bookmark> = serde_json::from_str(lit).unwrap();
+        assert_eq!(got, cm_core::default_bookmarks());
+    }
 
     #[test]
     fn versions_are_ordered_and_named() {
