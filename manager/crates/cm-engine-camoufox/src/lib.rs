@@ -19,6 +19,7 @@ mod extensions;
 mod helper;
 mod lock;
 mod machine;
+mod places;
 mod process;
 mod version;
 
@@ -207,6 +208,13 @@ impl Engine for Camoufox {
         // browser opens (see `extensions`).
         let (ud, xpis) = (user_data.clone(), opts.extensions.clone());
         let (installed, _) = tokio::task::spawn_blocking(move || extensions::sync(&ud, &xpis)).await??;
+
+        // CM-3.4: bookmarks go into places.sqlite while the profile is closed. Never fatal: a locked or
+        // odd database only means the bookmarks are not refreshed this time.
+        let (ud, bms) = (user_data.clone(), opts.bookmarks.clone());
+        if let Ok(Err(e)) = tokio::task::spawn_blocking(move || places::sync(&ud, &bms)).await {
+            eprintln!("bookmarks not synced: {e}");
+        }
 
         let mut cmd = Command::new(&self.python);
         cmd.arg(&self.helper).arg("launch").arg("--profile").arg(&launch_file).arg("--user-data").arg(&user_data);

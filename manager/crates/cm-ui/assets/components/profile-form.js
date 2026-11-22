@@ -27,6 +27,15 @@ I18N.add({
     'profileform.prefValue': 'Value',
     'profileform.prefAdd': 'Add pref',
     'profileform.prefRemove': 'Remove',
+    'profileform.section.bookmarks': 'Bookmarks',
+    'profileform.bookmarksHint': 'Kept in a "Camoufox Manager" folder on the bookmarks toolbar, written when the profile starts. A new profile shows them from its second start. Bookmarks you make yourself are left alone.',
+    'profileform.bm.title': 'Title',
+    'profileform.bm.url': 'https://',
+    'profileform.bm.folder': 'Folder (optional)',
+    'profileform.bm.add': 'Add bookmark',
+    'profileform.bm.remove': 'Remove',
+    'profileform.bm.import': 'Import bookmarks.html',
+    'profileform.bm.imported': 'Imported {n} bookmarks',
     'profileform.section.machine': 'Pinned machine',
     'profileform.name': 'Name',
     'profileform.notes': 'Notes',
@@ -105,6 +114,15 @@ I18N.add({
     'profileform.prefValue': 'Giá trị',
     'profileform.prefAdd': 'Thêm pref',
     'profileform.prefRemove': 'Xoá',
+    'profileform.section.bookmarks': 'Dấu trang',
+    'profileform.bookmarksHint': 'Lưu trong thư mục "Camoufox Manager" trên thanh dấu trang, ghi khi hồ sơ khởi động. Hồ sơ mới sẽ hiện chúng từ lần khởi động thứ hai. Dấu trang bạn tự tạo được giữ nguyên.',
+    'profileform.bm.title': 'Tiêu đề',
+    'profileform.bm.url': 'https://',
+    'profileform.bm.folder': 'Thư mục (tuỳ chọn)',
+    'profileform.bm.add': 'Thêm dấu trang',
+    'profileform.bm.remove': 'Xoá',
+    'profileform.bm.import': 'Nhập bookmarks.html',
+    'profileform.bm.imported': 'Đã nhập {n} dấu trang',
     'profileform.section.machine': 'Máy đã ghim',
     'profileform.name': 'Tên',
     'profileform.notes': 'Ghi chú',
@@ -177,7 +195,7 @@ CM.components.CmProfileForm = {
   emits: ['close', 'saved'],
   setup(props, { emit }) {
     const { reactive, ref, computed, watch } = Vue;
-    const f = reactive({ name: '', notes: '', os: 'win', startUrl: '', screen: '', window: '', locale: '', timezone: '', webrtc: 'replace', fonts: '', humanize: false, blockLocal: true, canvas: 'stable', data: { passwords: true, history: true, cache: true, siteStorage: true }, prefs: [] });
+    const f = reactive({ name: '', notes: '', os: 'win', startUrl: '', screen: '', window: '', locale: '', timezone: '', webrtc: 'replace', fonts: '', humanize: false, blockLocal: true, canvas: 'stable', data: { passwords: true, history: true, cache: true, siteStorage: true }, prefs: [], bookmarks: [] });
     const view = ref(null);          // snapshot shown in the machine panel (replaced after a regenerate)
     const busy = ref(false), error = ref(''), osPrompt = ref(false);
     const regen = reactive({ open: false, os: 'win', busy: false });
@@ -191,6 +209,7 @@ CM.components.CmProfileForm = {
         humanize: !!s.humanize, blockLocal: s.blockLocalNetwork !== false, canvas: s.canvas || 'stable',
         data: { passwords: true, history: true, cache: true, siteStorage: true, ...(s.data || {}) },
         prefs: Object.entries(s.customPrefs || {}).map(([k, v]) => ({ k, v: String(v) })),
+        bookmarks: (s.bookmarks || []).map(b => ({ title: b.title || '', url: b.url || '', folder: b.folder || '' })),
       });
       error.value = '';
     }
@@ -231,13 +250,37 @@ CM.components.CmProfileForm = {
     };
     const customPrefs = () => Object.fromEntries(f.prefs.filter(r => r.k.trim()).map(r => [r.k.trim(), prefValue(r.v)]));
     const addPref = () => f.prefs.push({ k: '', v: '' });
+    // Bookmarks section (CM-3.4): list editor + bookmarks.html import (parsed by the server).
+    const bmFile = ref(null), bmBusy = ref(false);
+    const addBookmark = () => f.bookmarks.push({ title: '', url: '', folder: '' });
+    const bookmarkList = () => f.bookmarks.filter(b => b.url.trim()).map(b => ({ title: b.title.trim(), url: b.url.trim(), folder: b.folder.trim() || null }));
+    async function importBookmarks(ev) {
+      const file = ev.target.files[0]; ev.target.value = '';
+      if (!file) return;
+      bmBusy.value = true;
+      try {
+        const r = await fetch('/api/bookmarks/import', { method: 'POST', body: file, headers: { 'content-type': 'text/html' } });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || r.statusText);
+        const have = new Set(f.bookmarks.map(b => b.url.trim() + '\n' + b.folder.trim()));
+        let n = 0;
+        for (const b of j.bookmarks) {
+          const k = b.url + '\n' + (b.folder || '');
+          if (have.has(k)) continue;
+          have.add(k); n++;
+          f.bookmarks.push({ title: b.title || '', url: b.url, folder: b.folder || '' });
+        }
+        toast(t('profileform.bm.imported', { n }));
+      } catch (e) { error.value = e.message; }
+      bmBusy.value = false;
+    }
     const body = osAction => ({
       name: f.name.trim(), notes: f.notes, os: f.os, osAction,
       settings: {
         locale: f.locale.trim() || null, timezone: f.timezone.trim() || null, webrtc: f.webrtc,
         window: f.window.trim() || null, screen: f.screen.trim() || null, startUrl: f.startUrl.trim() || null,
         humanize: f.humanize, fonts: f.fonts.split('\n').map(x => x.trim()).filter(Boolean), canvas: f.canvas,
-        data: { ...f.data }, customPrefs: customPrefs(), blockLocalNetwork: f.blockLocal ? null : false,
+        data: { ...f.data }, customPrefs: customPrefs(), blockLocalNetwork: f.blockLocal ? null : false, bookmarks: bookmarkList(),
       },
     });
     async function save(osAction) {
@@ -263,7 +306,7 @@ CM.components.CmProfileForm = {
       regen.busy = false;
     }
 
-    return { f, OSES, WEBRTC, COMMON_LOCALES, tzList, busy, error, osPrompt, regen, running, fp, view, addPref, machineRows, tzPlaceholder, localePlaceholder, osFrom, osTo, save, openRegen, regenerate };
+    return { f, OSES, WEBRTC, COMMON_LOCALES, tzList, busy, error, osPrompt, regen, running, fp, view, addPref, bmFile, bmBusy, addBookmark, importBookmarks, machineRows, tzPlaceholder, localePlaceholder, osFrom, osTo, save, openRegen, regenerate };
   },
   template: `<div>
     <cm-dialog :open="open && !regen.open && !osPrompt" :title="t('profileform.title')" :busy="busy" :width="680" @close="$emit('close')">
@@ -346,6 +389,22 @@ CM.components.CmProfileForm = {
               <div><button type="button" class="btn" @click="addPref">{{ t('profileform.prefAdd') }}</button></div>
             </div>
           </cm-field>
+        </fieldset>
+
+        <fieldset class="m-0 p-0 border-0 flex flex-col gap-2">
+          <legend class="text-[11px] uppercase tracking-wide text-faint font-semibold mb-1 p-0">{{ t('profileform.section.bookmarks') }}</legend>
+          <p class="m-0 text-[12px] text-faint">{{ t('profileform.bookmarksHint') }}</p>
+          <div v-for="(b, i) in f.bookmarks" :key="i" class="flex gap-2 items-center">
+            <input class="input flex-1" v-model="b.title" :placeholder="t('profileform.bm.title')" autocomplete="off">
+            <input class="input mono flex-[2]" v-model="b.url" :placeholder="t('profileform.bm.url')" autocomplete="off" spellcheck="false">
+            <input class="input flex-1" v-model="b.folder" :placeholder="t('profileform.bm.folder')" autocomplete="off">
+            <button type="button" class="btn" @click="f.bookmarks.splice(i, 1)">{{ t('profileform.bm.remove') }}</button>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" class="btn" @click="addBookmark">{{ t('profileform.bm.add') }}</button>
+            <button type="button" class="btn" :disabled="bmBusy" @click="bmFile.click()">{{ t('profileform.bm.import') }}</button>
+            <input ref="bmFile" type="file" accept=".html,.htm,text/html" class="hidden" @change="importBookmarks">
+          </div>
         </fieldset>
 
         <fieldset class="m-0 p-0 border-0 flex flex-col gap-2">

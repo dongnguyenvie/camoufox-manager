@@ -513,6 +513,7 @@ pub(crate) fn validate_settings(mut s: ProfileSettings, pinned_screen: Option<(u
     }
     s.fonts = fonts;
     validate_custom_prefs(&s.custom_prefs)?;
+    s.bookmarks = crate::bookmarks::validate(std::mem::take(&mut s.bookmarks))?;
     Ok(s)
 }
 
@@ -624,6 +625,7 @@ pub(crate) fn launch_options_for(p: &Profile, geo: Option<&ProxyCheck>, port: Op
         data: s.data,
         custom_prefs: s.custom_prefs.clone(),
         block_local_network: s.block_local_network.unwrap_or(true),
+        bookmarks: s.bookmarks.clone(),
         ..Default::default()
     };
     o.timezone = s.timezone.clone().or_else(|| geo.map(|g| g.timezone.clone()).filter(|t| !t.is_empty()));
