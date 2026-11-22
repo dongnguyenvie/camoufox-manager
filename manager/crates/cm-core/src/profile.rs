@@ -8,6 +8,7 @@ use crate::{ProfileId, Result, proxy::ProxyId};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 /// Fingerprint OS. Serialized as the short code used everywhere (`win`, `mac`, `lin`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -64,6 +65,27 @@ pub enum CanvasMode {
     Random,
 }
 
+/// What the profile keeps between runs. `true` = keep (the Firefox default); `false` = do not save
+/// it, or clear it when the browser closes. Cookies are never touched.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct DataSaving {
+    /// Offer to remember passwords.
+    pub passwords: bool,
+    /// Record browsing history (off = also cleared on shutdown).
+    pub history: bool,
+    /// Disk cache (off = no disk cache, and cleared on shutdown).
+    pub cache: bool,
+    /// Site storage (localStorage, IndexedDB, ...); off = cleared on shutdown, cookies stay.
+    pub site_storage: bool,
+}
+
+impl Default for DataSaving {
+    fn default() -> Self {
+        DataSaving { passwords: true, history: true, cache: true, site_storage: true }
+    }
+}
+
 /// User-editable settings. Every field is an override: `None` = follow the machine / proxy.
 /// Stored as JSON, so new fields are additive and old rows read with defaults.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -88,31 +110,13 @@ pub struct ProfileSettings {
     pub data: DataSaving,
     /// Extra Firefox prefs set at every launch (CM-3.3), applied after ours; values are
     /// bool / number / string. Keys the engine owns (proxy, fingerprint) are rejected on save.
-    pub custom_prefs: std::collections::BTreeMap<String, Value>,
+    pub custom_prefs: BTreeMap<String, Value>,
     /// Bookmarks kept in a "Camoufox Manager" folder on the toolbar (CM-3.4), written while the
     /// profile is closed.
     pub bookmarks: Vec<Bookmark>,
     /// Block pages from reaching localhost / private networks (port scans) (CM-3.6).
     /// `None` = on.
     pub block_local_network: Option<bool>,
-}
-
-/// Per-profile data saving toggles (CM-3.3). `true` = keep between launches.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct DataSaving {
-    pub passwords: bool,
-    pub history: bool,
-    pub bookmarks: bool,
-    /// localStorage / IndexedDB / service workers.
-    pub site_storage: bool,
-    pub cache: bool,
-}
-
-impl Default for DataSaving {
-    fn default() -> Self {
-        DataSaving { passwords: true, history: true, bookmarks: true, site_storage: true, cache: true }
-    }
 }
 
 /// One managed bookmark (CM-3.4).

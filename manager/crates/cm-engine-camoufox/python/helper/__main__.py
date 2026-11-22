@@ -62,6 +62,7 @@ def main():
     l.add_argument("--humanize", action="store_true")
     l.add_argument("--start-url")
     l.add_argument("--canvas", choices=["unique", "native", "random"])
+    l.add_argument("--prefs", help="JSON object of Firefox prefs (data saving + custom), applied last")
     l.add_argument("--extension-prefs", action="store_true", help="set the prefs that let sideloaded unsigned add-ons load")
     w = sub.add_parser("warm")
     w.add_argument("--ws", required=True)

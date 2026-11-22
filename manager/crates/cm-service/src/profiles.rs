@@ -417,7 +417,35 @@ pub(crate) fn validate_settings(mut s: ProfileSettings, pinned_screen: Option<(u
         return invalid("at most 200 extra fonts");
     }
     s.fonts = fonts;
+    validate_custom_prefs(&s.custom_prefs)?;
     Ok(s)
+}
+
+/// Pref name prefixes the user may not set: the app owns proxy, WebRTC, fingerprint, geography
+/// and locale, and a custom pref here would break the identity or leak the real network.
+const FORBIDDEN_PREF_PREFIXES: [&str; 6] =
+    ["network.proxy.", "media.peerconnection.", "privacy.resistfingerprinting", "camoufox.", "geo.", "intl."];
+
+/// Custom Firefox prefs: a bounded set of dotted names with bool / number / string values.
+pub(crate) fn validate_custom_prefs(prefs: &std::collections::BTreeMap<String, serde_json::Value>) -> Result<()> {
+    if prefs.len() > 200 {
+        return invalid("at most 200 custom prefs");
+    }
+    for (k, v) in prefs {
+        if k.is_empty() || k.len() > 200 || !k.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')) {
+            return invalid(format!("invalid pref name \"{k}\""));
+        }
+        let lower = k.to_ascii_lowercase();
+        if FORBIDDEN_PREF_PREFIXES.iter().any(|p| lower.starts_with(p)) {
+            return invalid(format!("pref \"{k}\" is managed by the app and cannot be set"));
+        }
+        match v {
+            serde_json::Value::Bool(_) | serde_json::Value::Number(_) => {}
+            serde_json::Value::String(s) if s.len() <= 2000 => {}
+            _ => return invalid(format!("pref \"{k}\" must be true/false, a number or a short text")),
+        }
+    }
+    Ok(())
 }
 
 /// Primary locale of a country (ISO 3166-1 alpha-2): the default when the proxy decides geography.
@@ -498,6 +526,8 @@ pub(crate) fn launch_options_for(p: &Profile, geo: Option<&ProxyCheck>, port: Op
         start_url: s.start_url.clone(),
         canvas_stable: s.canvas == CanvasMode::Stable,
         canvas_native: s.canvas == CanvasMode::Native,
+        data: s.data,
+        custom_prefs: s.custom_prefs.clone(),
         ..Default::default()
     };
     o.timezone = s.timezone.clone().or_else(|| geo.map(|g| g.timezone.clone()).filter(|t| !t.is_empty()));
@@ -687,6 +717,22 @@ mod tests {
         assert!(!bad(ProfileSettings { timezone: Some("UTC".into()), ..Default::default() }));
         assert!(bad(ProfileSettings { start_url: Some("file:///etc/passwd".into()), ..Default::default() }));
         assert!(bad(ProfileSettings { locale: Some("x".into()), ..Default::default() }));
+        let prefs = |k: &str, v: serde_json::Value| ProfileSettings { custom_prefs: [(k.to_string(), v)].into(), ..Default::default() };
+        assert!(!bad(prefs("browser.startup.homepage", "about:blank".into())));
+        assert!(!bad(prefs("dom.event.clipboardevents.enabled", false.into())));
+        assert!(!bad(prefs("network.http.max-connections", 5.into())));
+        for k in [
+            "network.proxy.type",
+            "media.peerconnection.enabled",
+            "privacy.resistFingerprinting",
+            "camoufox.x",
+            "geo.enabled",
+            "intl.accept_languages",
+            "Network.Proxy.http",
+        ] {
+            assert!(bad(prefs(k, true.into())), "{k} is reserved");
+        }
+        assert!(bad(prefs("a.b", serde_json::Value::Null)) && bad(prefs("a.b", serde_json::json!([1]))) && bad(prefs("a b", true.into())));
         assert!(!bad(ProfileSettings { screen: Some("2560x1440".into()), window: Some("2400x1300".into()), ..Default::default() }));
     }
 
