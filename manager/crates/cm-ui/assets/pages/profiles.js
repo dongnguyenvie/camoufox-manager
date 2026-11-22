@@ -619,18 +619,21 @@ CM.pages.profiles = {
 
             <td class="sr">
               <button v-if="p.running" class="btn btn-stop" :disabled="!!busy[p.id]" @click="act('stop', p.id)">
-                <span v-if="busy[p.id]" class="spin"></span><template v-else>■</template> {{ t('profiles.stop') }}
+                <span v-if="busy[p.id]" class="spin"></span><template v-else><cm-icon name="stop" :size="11" /></template> {{ t('profiles.stop') }}
               </button>
               <button v-else class="btn btn-start" :disabled="!!busy[p.id] || !o.providerAvailable" :title="o.providerAvailable ? '' : hint" @click="act('start', p.id)">
                 <span v-if="busy[p.id]" class="spin"></span><template v-else><cm-icon name="play" :size="12" /> {{ t('profiles.start') }}</template>
               </button>
-              <button class="icon-btn ml-1" :disabled="!!busy[p.id]" :title="t('profiles.edit')" @click="edit.id = p.id"><cm-icon name="pencil" :size="15" /></button>
-              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('transfer.export')" @click="xfer.exp = p"><cm-icon name="download" :size="15" /></button>
-              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('transfer.clone')" @click="xfer.clone = p"><cm-icon name="duplicate" :size="15" /></button>
-              <button class="icon-btn" :disabled="!!busy[p.id] || !!p.running" :title="p.running ? t('cookies.running') : t('cookies.title', { name: p.name })" @click="cookies.id = p.id"><cm-icon name="cookie" :size="15" /></button>
-              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('tpl.prof.extBtn')" @click="tplx.ext = p"><cm-icon name="puzzle" :size="15" /></button>
-              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('tpl.prof.starTitle')" @click="tplx.save = p"><cm-icon name="star" :size="15" /></button>
-              <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('profiles.delete')" @click="openDel(p)"><cm-icon name="trash" :size="15" /></button>
+              <span class="row-acts ml-1.5">
+                <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('profiles.edit')" @click="edit.id = p.id"><cm-icon name="pencil" :size="15" /></button>
+                <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('transfer.export')" @click="xfer.exp = p"><cm-icon name="download" :size="15" /></button>
+                <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('transfer.clone')" @click="xfer.clone = p"><cm-icon name="duplicate" :size="15" /></button>
+                <button class="icon-btn" :disabled="!!busy[p.id] || !!p.running" :title="p.running ? t('cookies.running') : t('cookies.title', { name: p.name })" @click="cookies.id = p.id"><cm-icon name="cookie" :size="15" /></button>
+                <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('tpl.prof.extBtn')" @click="tplx.ext = p"><cm-icon name="puzzle" :size="15" /></button>
+                <button class="icon-btn" :disabled="!!busy[p.id]" :title="t('tpl.prof.starTitle')" @click="tplx.save = p"><cm-icon name="star" :size="15" /></button>
+                <span class="sep"></span>
+                <button class="icon-btn danger" :disabled="!!busy[p.id]" :title="t('profiles.delete')" @click="openDel(p)"><cm-icon name="trash" :size="15" /></button>
+              </span>
             </td>
           </tr>
         </tbody>

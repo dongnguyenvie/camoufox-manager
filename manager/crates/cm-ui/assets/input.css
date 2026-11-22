@@ -59,13 +59,18 @@
   .btn { @apply inline-flex items-center justify-center gap-[7px] border border-line bg-panel px-[13px] py-[7px] rounded-[10px] cursor-pointer font-semibold text-[13px] whitespace-nowrap transition hover:bg-panel2 disabled:opacity-50 disabled:cursor-default; }
   .btn-start { @apply bg-accent border-accent text-white min-w-[92px] hover:bg-accent hover:brightness-110; }
   .btn-stop { @apply bg-bad border-bad text-white min-w-[92px] hover:bg-bad hover:brightness-110; }
-  .icon-btn { @apply border-0 bg-transparent cursor-pointer text-faint px-[5px] py-[3px] rounded-md text-[13px] hover:text-accent hover:bg-accent2; }
+  .icon-btn { @apply inline-flex items-center justify-center size-7 border-0 bg-transparent cursor-pointer text-muted rounded-md text-[13px] transition hover:text-ink hover:bg-panel2 disabled:opacity-40 disabled:cursor-default disabled:hover:bg-transparent; }
+  .icon-btn.danger { @apply hover:text-bad hover:bg-bad/10; }
+  /* row actions: one compact toolbar per row */
+  .row-acts { @apply inline-flex items-center gap-0.5; }
+  .row-acts .sep { @apply w-px h-4 bg-line mx-1; }
   .spin { @apply size-[13px] border-2 border-current border-r-transparent rounded-full animate-spin-fast; }
   .chip { @apply inline-flex items-center gap-[7px] px-[11px] py-[5px] rounded-full bg-panel2 text-muted text-xs whitespace-nowrap; }
   .dot {@apply size-2 rounded-full bg-faint shrink-0; }
   /* form controls (components/fields.js) */
   .input { @apply px-3 py-2 border border-line rounded-lg bg-panel text-ink text-[13.5px] outline-none focus:border-accent disabled:opacity-50; }
-  select.input { @apply px-2.5; }
+  select.input { @apply appearance-none pl-3 pr-8 bg-no-repeat cursor-pointer font-medium text-ink hover:border-faint focus:border-accent focus:ring-3 focus:ring-accent/15; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E"); background-position: right 10px center; border-radius: 10px; }
+  select.input option { font-weight: 400; }
   .search { @apply flex items-center gap-2 flex-1 min-w-40 max-w-[340px] px-3 py-[7px] border border-line rounded-[10px] bg-panel text-faint focus-within:border-accent; }
   .search input { @apply flex-1 min-w-0 border-0 bg-transparent outline-none text-ink text-[13px]; }
   .banner { @apply flex items-start gap-2.5 px-3.5 py-2.5 mb-3 rounded-xl bg-warnbg text-warn text-[13px]; }
@@ -84,21 +89,21 @@
 
   /* Spreadsheet grid: sticky header rows/columns are hard to write as utilities, so they are grouped here */
   .grid-tbl { border-collapse: separate; border-spacing: 0; table-layout: fixed; width: max-content; font-size: 12.5px; }
-  .grid-tbl th, .grid-tbl td { height: 32px; padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
-  .grid-tbl thead th { position: sticky; z-index: 3; background: var(--panel-2); color: var(--muted); font-weight: 640; }
-  .grid-tbl thead tr.g th { top: 0; height: 26px; font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--faint); border-bottom-color: transparent; }
-  .grid-tbl thead tr.h th { top: 26px; font-size: 11.5px; box-shadow: inset 0 -1px 0 var(--line); }
+  .grid-tbl th, .grid-tbl td { height: 40px; padding: 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-right: 1px solid transparent; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+  .grid-tbl thead th { position: sticky; z-index: 3; background: var(--panel); color: var(--muted); font-weight: 600; }
+  .grid-tbl thead tr.g th { top: 0; height: 24px; padding-top: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); font-weight: 600; border-bottom-color: transparent; }
+  .grid-tbl thead tr.h th { top: 24px; height: 34px; font-size: 11.5px; box-shadow: inset 0 -1px 0 var(--line); }
   .grid-tbl td { background: var(--panel); user-select: none; -webkit-user-select: none; cursor: cell; }
-  .grid-tbl tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--panel-2) 45%, var(--panel)); }
   .grid-tbl tbody tr:hover td { background: var(--row-hover); }
+  .grid-tbl tbody tr:last-child td { border-bottom-color: transparent; }
   .grid-tbl tbody tr.live td.c-name { box-shadow: inset 3px 0 0 var(--ok); }
-  .grid-tbl .gs { border-left: 2px solid var(--line); }
+  .grid-tbl .gs { border-left: 1px solid var(--line); }
   /* fixed columns: # and Name on the left, actions on the right */
   .grid-tbl .s0 { position: sticky; left: 0; z-index: 2; }
-  .grid-tbl .s1 { position: sticky; left: 44px; z-index: 2; border-right: 2px solid var(--line); }
-  .grid-tbl .sr { position: sticky; right: 0; z-index: 2; border-left: 2px solid var(--line); border-right: none; text-align: center; padding: 0 8px; cursor: default; }
+  .grid-tbl .s1 { position: sticky; left: 44px; z-index: 2; border-right: 1px solid var(--line); }
+  .grid-tbl .sr { position: sticky; right: 0; z-index: 2; border-left: 1px solid var(--line); border-right: none; text-align: left; padding: 0 8px; cursor: default; box-shadow: -8px 0 12px -10px rgb(0 0 0 / .18); }
   .grid-tbl thead .s0, .grid-tbl thead .s1, .grid-tbl thead .sr { z-index: 4; }
-  .grid-tbl td.rn { color: var(--faint); text-align: right; font: 11px var(--font-mono); background: var(--panel-2) !important; cursor: pointer; }
+  .grid-tbl td.rn { color: var(--faint); text-align: right; font: 11px var(--font-mono); cursor: pointer; }
   .grid-tbl td.num { text-align: right; font-variant-numeric: tabular-nums; }
   .grid-tbl td.mono { font-family: var(--font-mono); font-size: 11.5px; }
   .grid-tbl td.sel { background: color-mix(in srgb, var(--accent) 14%, var(--panel)) !important; }
@@ -106,4 +111,9 @@
   .grid-tbl td.flash { animation: flash .5s; }
   .grid-tbl select { width: 100%; padding: 3px 6px; border-radius: 6px; font-size: 12px; }
   .grid-tbl .btn { padding: 4px 10px; border-radius: 7px; font-size: 12px; min-width: 76px; }
+  .grid-tbl .sr .btn-start, .grid-tbl .sr .btn-stop { height: 26px; min-width: 72px; padding: 0 10px; gap: 5px; border-radius: 7px; }
+  .grid-tbl .sr .btn-start { background: var(--accent-2); border-color: transparent; color: var(--accent); }
+  .grid-tbl .sr .btn-start:hover:not(:disabled) { background: var(--accent); color: #fff; filter: none; }
+  .grid-tbl .sr .btn-stop { background: color-mix(in srgb, var(--bad) 12%, var(--panel)); border-color: transparent; color: var(--bad); }
+  .grid-tbl .sr .btn-stop:hover:not(:disabled) { background: var(--bad); color: #fff; filter: none; }
 }
