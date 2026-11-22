@@ -9,6 +9,7 @@ license.workspace = true
 cm-core.workspace = true
 cm-tailscale.workspace = true
 anyhow.workspace = true
+getrandom = "0.3"
 async-trait.workspace = true
 base64.workspace = true
 reqwest.workspace = true

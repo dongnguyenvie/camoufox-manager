@@ -8,7 +8,7 @@ use cm_core::{
     WebRtcMode,
 };
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fs, io::Read, path::Path, path::PathBuf};
+use std::{collections::HashMap, fs, path::Path, path::PathBuf};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,7 +89,7 @@ fn dir_size(p: &Path) -> u64 {
 /// 24 random hex chars (from /dev/urandom, no extra crate).
 pub(crate) fn new_id() -> Result<String> {
     let mut b = [0u8; 12];
-    fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b)).context("cannot read /dev/urandom")?;
+    getrandom::fill(&mut b).map_err(|e| anyhow::anyhow!("cannot read OS randomness: {e}"))?;
     Ok(b.iter().map(|x| format!("{x:02x}")).collect())
 }
 

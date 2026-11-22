@@ -15,7 +15,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::{
-    io::Read,
     sync::{Arc, Mutex, OnceLock},
 };
 
@@ -79,7 +78,7 @@ pub enum KeyError {
 /// `n` random bytes as hex, from the OS (macOS only target, so `/dev/urandom` is always there).
 fn random_hex(n: usize) -> Result<String> {
     let mut buf = vec![0u8; n];
-    std::fs::File::open("/dev/urandom")?.read_exact(&mut buf)?;
+    getrandom::fill(&mut buf).map_err(|e| anyhow::anyhow!("cannot read OS randomness: {e}"))?;
     Ok(hex(&buf))
 }
 

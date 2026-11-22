@@ -910,7 +910,10 @@ mod tests {
         let zip = t.join("out.zip");
         let (n, skipped) = write_zip(&data, base_manifest(), &zip).unwrap();
         assert_eq!(n, 2, "lock files and caches excluded");
+        #[cfg(unix)]
         assert_eq!(skipped, vec!["evil-link".to_string()]);
+        #[cfg(not(unix))]
+        assert!(skipped.is_empty());
         let m = read_manifest(&zip).unwrap();
         assert_eq!(m.files.len(), 2);
         assert!(m.files.iter().all(|f| f.sha256.len() == 64));

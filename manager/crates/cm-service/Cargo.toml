@@ -10,6 +10,7 @@ cm-core.workspace = true
 cm-relay.workspace = true
 cm-sync.workspace = true
 anyhow.workspace = true
+getrandom = "0.3"
 async-trait.workspace = true
 serde.workspace = true
 serde_json.workspace = true
