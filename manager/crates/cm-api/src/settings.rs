@@ -37,7 +37,7 @@ async fn put_settings(State(m): State<Shared>, headers: HeaderMap, Json(b): Json
 }
 
 async fn reveal_data(State(m): State<Shared>) -> ApiResult {
-    std::process::Command::new("open").arg(&m.config().data_dir).spawn()?;
+    std::process::Command::new(super::opener()).arg(&m.config().data_dir).spawn()?;
     ok(json!({ "ok": true }))
 }
 

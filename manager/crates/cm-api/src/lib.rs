@@ -103,3 +103,14 @@ pub fn router(m: Shared) -> Router {
     let api = notifications::layer(api, m.clone());
     auth::apply(api, m.clone()).merge(ui::routes()).with_state(m)
 }
+
+/// File-manager opener: `open` on macOS, `explorer` on Windows, `xdg-open` elsewhere.
+pub(crate) fn opener() -> &'static str {
+    if cfg!(target_os = "windows") {
+        "explorer"
+    } else if cfg!(target_os = "macos") {
+        "open"
+    } else {
+        "xdg-open"
+    }
+}
