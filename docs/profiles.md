@@ -124,8 +124,12 @@ remotely.
 
 ## Search engine
 
-Camoufox ships with every search engine removed and a dummy "None" engine, so typing words in the
-address bar goes nowhere. Before each launch the app restores the stock engines in the installed
-Camoufox build and makes Google the default (`distribution/policies.json`, `SearchEngines` only).
-Firefox reads this policy per install, not per profile, so it applies to every profile; it is reapplied
-after a Camoufox update. A policy you edited by hand is left alone.
+Camoufox's build has one built-in search engine, a dummy "None" that sends searches to `127.0.0.1`, so
+typing words in the address bar fails. Before each launch the app adds Google, DuckDuckGo and Bing to the
+installed Camoufox build's `distribution/policies.json` (`SearchEngines` only) and makes Google the
+default. Firefox reads this policy per install, not per profile, so it applies to every profile and is
+reapplied after a Camoufox update. A policy you edited by hand is left alone.
+
+Each profile's saved search state is reset once (marker file `.cm-search-reset-v2` in its data folder),
+because the old state keeps "None" as the default. Search engines added by hand in that profile are lost
+that one time.

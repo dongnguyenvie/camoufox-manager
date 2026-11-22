@@ -253,17 +253,46 @@ def search_policy_files(executable_path):
     ]
 
 
+SEARCH_ENGINES = [
+    {
+        "Name": "Google",
+        "URLTemplate": "https://www.google.com/search?q={searchTerms}",
+        "SuggestURLTemplate": "https://www.google.com/complete/search?client=firefox&q={searchTerms}",
+        "IconURL": "https://www.google.com/favicon.ico",
+        "Alias": "@google",
+    },
+    {
+        "Name": "DuckDuckGo",
+        "URLTemplate": "https://duckduckgo.com/?q={searchTerms}",
+        "SuggestURLTemplate": "https://ac.duckduckgo.com/ac/?q={searchTerms}&type=list",
+        "IconURL": "https://duckduckgo.com/favicon.ico",
+        "Alias": "@ddg",
+    },
+    {
+        "Name": "Bing",
+        "URLTemplate": "https://www.bing.com/search?q={searchTerms}",
+        "SuggestURLTemplate": "https://www.bing.com/osjson.aspx?query={searchTerms}",
+        "IconURL": "https://www.bing.com/favicon.ico",
+        "Alias": "@bing",
+    },
+]
+
+
 def patch_search_policy(policies):
-    """Camoufox ships a dummy "None" search engine that posts to http://127.0.0.1 and removes every real
-    one, so typing in the address bar fails. Profiles here are used by people, so restore the stock
-    engines with Google as the default. Only Camoufox's own dummy setup is replaced, so a policy the
-    user edited by hand is left alone. Returns True when `policies` changed."""
+    """Camoufox's build has a single built-in search engine, a dummy "None" that posts to
+    http://127.0.0.1, so typing words in the address bar fails. Profiles here are used by people, so add
+    Google, DuckDuckGo and Bing through the policy and make Google the default. Only Camoufox's own
+    setup (or our earlier patch) is replaced, so a policy the user edited by hand is left alone.
+    Returns True when `policies` changed."""
     p = policies.get("policies")
     se = p.get("SearchEngines") if isinstance(p, dict) else None
-    if not isinstance(se, dict) or se.get("Default") != "None":
+    if not isinstance(se, dict) or se.get("Default") not in ("None", "Google"):
+        return False
+    added = {e.get("Name") for e in se.get("Add") or [] if isinstance(e, dict)}
+    if se.get("Default") == "Google" and "Google" in added:
         return False
     keep = {k: se[k] for k in ("PreventInstalls",) if k in se}
-    p["SearchEngines"] = {**keep, "Default": "Google"}
+    p["SearchEngines"] = {**keep, "Add": SEARCH_ENGINES, "Default": "Google", "Remove": ["None"]}
     return True
 
 
@@ -288,14 +317,13 @@ def ensure_search_engine(executable_path):
             print(f"search policy: {e}", file=sys.stderr)
 
 
-SEARCH_RESET_MARKER = ".cm-search-reset-v1"
+SEARCH_RESET_MARKER = ".cm-search-reset-v2"
 
 
 def reset_profile_search(user_data):
     """Once per profile: drop the saved search engine state (`search.json.mozlz4`) and the policy's
     run-once marker, so the stock engines come back and the `Default: Google` policy is applied.
-    Camoufox's original policy hid every engine in that file, and Firefox keeps them hidden even after
-    the policy changes. Custom engines a user added are lost once; nothing else in the profile is."""
+    The saved state keeps the dummy "None" engine as default even after the policy changes. Custom engines a user added are lost once; nothing else in the profile is."""
     import os
     import re
 
