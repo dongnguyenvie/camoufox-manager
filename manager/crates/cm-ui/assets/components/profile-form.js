@@ -36,6 +36,8 @@ I18N.add({
     'profileform.bm.remove': 'Remove',
     'profileform.bm.import': 'Import bookmarks.html',
     'profileform.bm.imported': 'Imported {n} bookmarks',
+    'profileform.bm.defaults': 'Add defaults',
+    'profileform.bm.defaultsAdded': 'Added {n} default bookmarks',
     'profileform.section.machine': 'Pinned machine',
     'profileform.name': 'Name',
     'profileform.notes': 'Notes',
@@ -123,6 +125,8 @@ I18N.add({
     'profileform.bm.remove': 'Xoá',
     'profileform.bm.import': 'Nhập bookmarks.html',
     'profileform.bm.imported': 'Đã nhập {n} dấu trang',
+    'profileform.bm.defaults': 'Thêm mặc định',
+    'profileform.bm.defaultsAdded': 'Đã thêm {n} dấu trang mặc định',
     'profileform.section.machine': 'Máy đã ghim',
     'profileform.name': 'Tên',
     'profileform.notes': 'Ghi chú',
@@ -254,6 +258,24 @@ CM.components.CmProfileForm = {
     const bmFile = ref(null), bmBusy = ref(false);
     const addBookmark = () => f.bookmarks.push({ title: '', url: '', folder: '' });
     const bookmarkList = () => f.bookmarks.filter(b => b.url.trim()).map(b => ({ title: b.title.trim(), url: b.url.trim(), folder: b.folder.trim() || null }));
+    async function addDefaultBookmarks() {
+      bmBusy.value = true;
+      try {
+        const r = await fetch('/api/bookmarks/defaults');
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(j.error || r.statusText);
+        const have = new Set(f.bookmarks.map(b => b.url.trim() + '\n' + b.folder.trim()));
+        let n = 0;
+        for (const b of j.bookmarks) {
+          const k = b.url + '\n' + (b.folder || '');
+          if (have.has(k)) continue;
+          have.add(k); n++;
+          f.bookmarks.push({ title: b.title || '', url: b.url, folder: b.folder || '' });
+        }
+        toast(t('profileform.bm.defaultsAdded', { n }));
+      } catch (e) { error.value = e.message; }
+      bmBusy.value = false;
+    }
     async function importBookmarks(ev) {
       const file = ev.target.files[0]; ev.target.value = '';
       if (!file) return;
@@ -306,7 +328,7 @@ CM.components.CmProfileForm = {
       regen.busy = false;
     }
 
-    return { f, OSES, WEBRTC, COMMON_LOCALES, tzList, busy, error, osPrompt, regen, running, fp, view, addPref, bmFile, bmBusy, addBookmark, importBookmarks, machineRows, tzPlaceholder, localePlaceholder, osFrom, osTo, save, openRegen, regenerate };
+    return { f, OSES, WEBRTC, COMMON_LOCALES, tzList, busy, error, osPrompt, regen, running, fp, view, addPref, bmFile, bmBusy, addBookmark, addDefaultBookmarks, importBookmarks, machineRows, tzPlaceholder, localePlaceholder, osFrom, osTo, save, openRegen, regenerate };
   },
   template: `<div>
     <cm-dialog :open="open && !regen.open && !osPrompt" :title="t('profileform.title')" :busy="busy" :width="680" @close="$emit('close')">
@@ -403,6 +425,7 @@ CM.components.CmProfileForm = {
           <div class="flex gap-2">
             <button type="button" class="btn" @click="addBookmark">{{ t('profileform.bm.add') }}</button>
             <button type="button" class="btn" :disabled="bmBusy" @click="bmFile.click()">{{ t('profileform.bm.import') }}</button>
+            <button type="button" class="btn" :disabled="bmBusy" @click="addDefaultBookmarks">{{ t('profileform.bm.defaults') }}</button>
             <input ref="bmFile" type="file" accept=".html,.htm,text/html" class="hidden" @change="importBookmarks">
           </div>
         </fieldset>

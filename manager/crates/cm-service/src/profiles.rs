@@ -331,7 +331,7 @@ impl Manager {
             last_activity: None,
             proxy_id: None,
             machine,
-            settings: ProfileSettings::default(),
+            settings: ProfileSettings { bookmarks: cm_core::default_bookmarks(), ..Default::default() },
         };
         self.d.profiles.insert(&p).await?;
         let id = p.id.clone();

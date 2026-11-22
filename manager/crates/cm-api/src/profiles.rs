@@ -84,6 +84,11 @@ async fn import_bookmarks(body: Bytes) -> ApiResult {
     ok(json!({ "bookmarks": cm_service::bookmarks::validate(cm_service::bookmarks::parse_netscape(&html))? }))
 }
 
+/// The starter bookmark set every new profile gets.
+async fn default_bookmarks() -> ApiResult {
+    ok(json!({ "bookmarks": cm_core::default_bookmarks() }))
+}
+
 async fn reveal(State(m): State<Shared>, Path(id): Path<String>) -> ApiResult {
     std::process::Command::new(super::opener()).arg(m.profile_dir(&id).await?).spawn()?;
     ok(json!({ "ok": true }))
@@ -102,5 +107,6 @@ pub fn routes() -> Router<Shared> {
         .route("/api/profiles/{id}/restore", post(restore_profile))
         .route("/api/profiles/{id}/purge", delete(purge_profile))
         .route("/api/profiles/{id}/reveal", post(reveal))
+        .route("/api/bookmarks/defaults", get(default_bookmarks))
         .route("/api/bookmarks/import", post(import_bookmarks).layer(DefaultBodyLimit::max(16 << 20)))
 }
