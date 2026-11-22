@@ -274,7 +274,7 @@ CM.components.CmOrgBar = {
       <option v-for="v in CMorg.views" :key="v.id" :value="v.id">{{ v.name }}</option>
     </select>
     <button class="btn !py-1 !text-[12.5px]" :title="t('org.viewSaveTitle')" @click="openSave">{{ t('org.viewSave') }}</button>
-    <button v-if="cur" class="icon-btn" :title="t('org.viewDelete')" @click="del">🗑</button>
+    <button v-if="cur" class="icon-btn" :title="t('org.viewDelete')" @click="del"><cm-icon name="trash" :size="15" /></button>
     <span class="w-px h-5 bg-line mx-1"></span>
     <select class="input !py-1 !text-[12.5px]" v-model="orgx.of.tag" :title="t('org.filter.tag')">
       <option value="">{{ t('org.filter.anyTag') }}</option>
@@ -360,7 +360,7 @@ CM.components.CmOrgBulk = {
     </select>
     <button class="btn !py-1" :disabled="!!busy || pick.group === '__'" @click="applyGroup">{{ t('org.bulk.apply') }}</button>
     <div class="flex-1"></div>
-    <button class="btn btn-stop !min-w-0 !py-1" :disabled="!!busy" @click="confirmDel = true">🗑 {{ t('org.bulk.delete') }}</button>
+    <button class="btn btn-stop !min-w-0 !py-1" :disabled="!!busy" @click="confirmDel = true"><cm-icon name="trash" /> {{ t('org.bulk.delete') }}</button>
 
     <cm-dialog :open="confirmDel" :title="t('org.bulk.deleteTitle', { n: ids.length })" :busy="busy === 'delete'" @close="confirmDel = false">
       <p class="m-0 text-[13px] text-muted">{{ t('org.bulk.deleteBody') }}</p>
