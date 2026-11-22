@@ -232,7 +232,10 @@ impl Procs {
                 hb.lock().unwrap().heartbeat();
             }
         });
-        self.map.lock().await.insert(id.to_string(), Proc { child, stdin, pgid, job, dir: profile_dir.to_path_buf(), _lock: lock, heartbeat });
+        self.map
+            .lock()
+            .await
+            .insert(id.to_string(), Proc { child, stdin, pgid, job, dir: profile_dir.to_path_buf(), _lock: lock, heartbeat });
         Ok(ws)
     }
 

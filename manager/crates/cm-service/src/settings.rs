@@ -14,9 +14,7 @@ use cm_core::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use std::{
-    sync::{Arc, Mutex, OnceLock},
-};
+use std::sync::{Arc, Mutex, OnceLock};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

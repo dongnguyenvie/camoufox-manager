@@ -2,10 +2,7 @@
 //! in a profile: it only looks (helper files on disk, lock files, the process list).
 
 use crate::{helper, lock};
-use std::{
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 /// State of the embedded python helper under `<root>/helper/`.
 #[derive(Clone, Debug, Default, PartialEq)]

@@ -6,7 +6,7 @@ use std::path::PathBuf;
 #[cfg(windows)]
 fn app_support() -> PathBuf {
     std::env::var("APPDATA")
-        .or_else(|_| std::env::var("USERPROFILE").map(|h| format!("{h}\AppData\Roaming")))
+        .or_else(|_| std::env::var("USERPROFILE").map(|h| format!(r"{h}\AppData\Roaming")))
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("C:\\"))
 }

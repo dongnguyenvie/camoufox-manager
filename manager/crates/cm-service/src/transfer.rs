@@ -29,14 +29,14 @@ use cm_core::{
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
+#[cfg(unix)]
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
     io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
-#[cfg(unix)]
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
 
 /// Set unix permission bits; a no-op on Windows (the per-user profile ACL applies).
@@ -151,10 +151,7 @@ fn mtime_ns(md: &fs::Metadata) -> i128 {
 
 #[cfg(not(unix))]
 fn mtime_ns(md: &fs::Metadata) -> i128 {
-    md.modified()
-        .ok()
-        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-        .map_or(0, |d| i128::try_from(d.as_nanos()).unwrap_or(0))
+    md.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map_or(0, |d| i128::try_from(d.as_nanos()).unwrap_or(0))
 }
 
 pub(crate) struct Found {

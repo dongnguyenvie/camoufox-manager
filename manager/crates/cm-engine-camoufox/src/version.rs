@@ -77,7 +77,10 @@ pub(crate) fn find_uv() -> Option<PathBuf> {
     }
     let home = std::env::var(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from).unwrap_or_default();
     let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf));
-    uv_dirs(exe_dir, std::env::var_os("PATH"), &home).into_iter().map(|d| d.join(if cfg!(windows) { "uv.exe" } else { "uv" })).find(|p| p.is_file())
+    uv_dirs(exe_dir, std::env::var_os("PATH"), &home)
+        .into_iter()
+        .map(|d| d.join(if cfg!(windows) { "uv.exe" } else { "uv" }))
+        .find(|p| p.is_file())
 }
 
 /// Forward every line (split on `\n` and `\r`, so progress bars become lines) to `tx`.
@@ -136,7 +139,9 @@ async fn step(program: &Path, args: &[&str], path_env: &std::ffi::OsStr, log: &(
 pub(crate) async fn install(python: &Path, log: &(dyn Fn(String) + Send + Sync)) -> Result<()> {
     let venv = match (python.parent(), python.file_name().and_then(|n| n.to_str())) {
         (Some(bin), Some("python")) if bin.file_name().and_then(|n| n.to_str()) == Some("bin") => bin.parent().map(Path::to_path_buf),
-        (Some(bin), Some("python.exe")) if bin.file_name().and_then(|n| n.to_str()) == Some("Scripts") => bin.parent().map(Path::to_path_buf),
+        (Some(bin), Some("python.exe")) if bin.file_name().and_then(|n| n.to_str()) == Some("Scripts") => {
+            bin.parent().map(Path::to_path_buf)
+        }
         _ => None,
     }
     .with_context(|| format!("cannot install: {} is not <venv>/bin/python (CAMOUFOX_PYTHON points elsewhere)", python.display()))?;

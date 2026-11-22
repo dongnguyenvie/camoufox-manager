@@ -11,11 +11,11 @@
 //! so the loops are tested without a server.
 
 use crate::client::PeerError;
+#[cfg(not(unix))]
+use crate::identity::OpenOptionsExt;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-#[cfg(not(unix))]
-use crate::identity::OpenOptionsExt;
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
 use std::{
