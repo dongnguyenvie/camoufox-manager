@@ -99,6 +99,10 @@ async def cmd_launch(args):
         opts.pop("proxy", None)
         if mode != "forward":
             prefs["media.peerconnection.ice.proxy_only_if_behind_proxy"] = False
+    if args.prefs:
+        # Data-saving toggles and the profile's custom prefs (validated by the app): last word.
+        extra = json.loads(args.prefs)
+        prefs.update({k: v for k, v in extra.items() if isinstance(v, (bool, int, float, str))})
     encode_chunks(env, "CAMOU_CONFIG_", cfg)
     encode_chunks(env, "CAMOU_PREFS_", prefs)
 

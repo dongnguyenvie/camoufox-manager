@@ -81,6 +81,10 @@ pub struct LaunchOptions {
     /// Firefox extensions (`.xpi` files) to install into the profile before the browser opens.
     /// The engine also removes extensions it installed earlier that are no longer listed.
     pub extensions: Vec<PathBuf>,
+    /// What the profile keeps between runs (engine maps it to browser prefs).
+    pub data: crate::profile::DataSaving,
+    /// Extra browser prefs from the profile, applied last (already validated).
+    pub custom_prefs: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 /// A running browser, remote-controllable at `ws_url` (protocol: [`Engine::ws_protocol`]).

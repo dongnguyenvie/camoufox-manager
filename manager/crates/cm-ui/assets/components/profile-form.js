@@ -15,6 +15,18 @@ I18N.add({
     'profileform.section.region': 'Region',
     'profileform.section.network': 'WebRTC',
     'profileform.section.fingerprint': 'Fingerprint',
+    'profileform.section.data': 'Data',
+    'profileform.dataHint': 'What this profile keeps between runs. Turning one off stops it being saved and clears it when the browser closes. Cookies and logins are never cleared.',
+    'profileform.data.passwords': 'Save passwords',
+    'profileform.data.history': 'Save browsing history',
+    'profileform.data.cache': 'Save cache',
+    'profileform.data.siteStorage': 'Save site storage (localStorage, IndexedDB)',
+    'profileform.prefs': 'Custom Firefox prefs',
+    'profileform.prefsHint': 'Advanced. Applied last at launch. Values: true, false, a number or text. Proxy, WebRTC, geo, intl, camoufox and fingerprint prefs are managed by the app and rejected.',
+    'profileform.prefKey': 'about:config name',
+    'profileform.prefValue': 'Value',
+    'profileform.prefAdd': 'Add pref',
+    'profileform.prefRemove': 'Remove',
     'profileform.section.machine': 'Pinned machine',
     'profileform.name': 'Name',
     'profileform.notes': 'Notes',
@@ -79,6 +91,18 @@ I18N.add({
     'profileform.section.region': 'Vùng',
     'profileform.section.network': 'WebRTC',
     'profileform.section.fingerprint': 'Fingerprint',
+    'profileform.section.data': 'Dữ liệu',
+    'profileform.dataHint': 'Những gì profile này giữ lại giữa các lần mở. Tắt một mục thì không lưu và sẽ xoá khi đóng browser. Cookie và đăng nhập không bao giờ bị xoá.',
+    'profileform.data.passwords': 'Lưu mật khẩu',
+    'profileform.data.history': 'Lưu lịch sử duyệt web',
+    'profileform.data.cache': 'Lưu cache',
+    'profileform.data.siteStorage': 'Lưu dữ liệu website (localStorage, IndexedDB)',
+    'profileform.prefs': 'Pref Firefox tuỳ chỉnh',
+    'profileform.prefsHint': 'Nâng cao. Áp dụng cuối cùng khi mở. Giá trị: true, false, số hoặc chữ. Pref proxy, WebRTC, geo, intl, camoufox và fingerprint do app quản lý nên bị từ chối.',
+    'profileform.prefKey': 'Tên trong about:config',
+    'profileform.prefValue': 'Giá trị',
+    'profileform.prefAdd': 'Thêm pref',
+    'profileform.prefRemove': 'Xoá',
     'profileform.section.machine': 'Máy đã ghim',
     'profileform.name': 'Tên',
     'profileform.notes': 'Ghi chú',
@@ -149,7 +173,7 @@ CM.components.CmProfileForm = {
   emits: ['close', 'saved'],
   setup(props, { emit }) {
     const { reactive, ref, computed, watch } = Vue;
-    const f = reactive({ name: '', notes: '', os: 'win', startUrl: '', screen: '', window: '', locale: '', timezone: '', webrtc: 'replace', fonts: '', humanize: false, canvas: 'stable' });
+    const f = reactive({ name: '', notes: '', os: 'win', startUrl: '', screen: '', window: '', locale: '', timezone: '', webrtc: 'replace', fonts: '', humanize: false, canvas: 'stable', data: { passwords: true, history: true, cache: true, siteStorage: true }, prefs: [] });
     const view = ref(null);          // snapshot shown in the machine panel (replaced after a regenerate)
     const busy = ref(false), error = ref(''), osPrompt = ref(false);
     const regen = reactive({ open: false, os: 'win', busy: false });
@@ -161,6 +185,8 @@ CM.components.CmProfileForm = {
         name: p.name, notes: p.notes || '', os: p.os, startUrl: s.startUrl || '', screen: s.screen || '', window: s.window || '',
         locale: s.locale || '', timezone: s.timezone || '', webrtc: s.webrtc || 'replace', fonts: (s.fonts || []).join('\n'),
         humanize: !!s.humanize, canvas: s.canvas || 'stable',
+        data: { passwords: true, history: true, cache: true, siteStorage: true, ...(s.data || {}) },
+        prefs: Object.entries(s.customPrefs || {}).map(([k, v]) => ({ k, v: String(v) })),
       });
       error.value = '';
     }
@@ -192,12 +218,22 @@ CM.components.CmProfileForm = {
     const osTo = computed(() => osLabel(f.os));
     const tzList = timezones();
 
+    // Text -> typed pref value: true/false, plain numbers, otherwise the text itself.
+    const prefValue = v => {
+      const x = v.trim();
+      if (x === 'true') return true;
+      if (x === 'false') return false;
+      return x !== '' && /^-?\d+(\.\d+)?$/.test(x) ? Number(x) : v;
+    };
+    const customPrefs = () => Object.fromEntries(f.prefs.filter(r => r.k.trim()).map(r => [r.k.trim(), prefValue(r.v)]));
+    const addPref = () => f.prefs.push({ k: '', v: '' });
     const body = osAction => ({
       name: f.name.trim(), notes: f.notes, os: f.os, osAction,
       settings: {
         locale: f.locale.trim() || null, timezone: f.timezone.trim() || null, webrtc: f.webrtc,
         window: f.window.trim() || null, screen: f.screen.trim() || null, startUrl: f.startUrl.trim() || null,
         humanize: f.humanize, fonts: f.fonts.split('\n').map(x => x.trim()).filter(Boolean), canvas: f.canvas,
+        data: { ...f.data }, customPrefs: customPrefs(),
       },
     });
     async function save(osAction) {
@@ -223,7 +259,7 @@ CM.components.CmProfileForm = {
       regen.busy = false;
     }
 
-    return { f, OSES, WEBRTC, COMMON_LOCALES, tzList, busy, error, osPrompt, regen, running, fp, view, machineRows, tzPlaceholder, localePlaceholder, osFrom, osTo, save, openRegen, regenerate };
+    return { f, OSES, WEBRTC, COMMON_LOCALES, tzList, busy, error, osPrompt, regen, running, fp, view, addPref, machineRows, tzPlaceholder, localePlaceholder, osFrom, osTo, save, openRegen, regenerate };
   },
   template: `<div>
     <cm-dialog :open="open && !regen.open && !osPrompt" :title="t('profileform.title')" :busy="busy" :width="680" @close="$emit('close')">
@@ -283,6 +319,25 @@ CM.components.CmProfileForm = {
             <textarea class="input mono" rows="3" v-model="f.fonts" spellcheck="false"></textarea>
           </cm-field>
           <div class="col-span-full"><cm-switch v-model="f.humanize" :label="t('profileform.humanize')"/></div>
+        </fieldset>
+
+        <fieldset class="m-0 p-0 border-0 flex flex-col gap-2">
+          <legend class="text-[11px] uppercase tracking-wide text-faint font-semibold mb-1 p-0">{{ t('profileform.section.data') }}</legend>
+          <p class="m-0 text-[12px] text-faint">{{ t('profileform.dataHint') }}</p>
+          <cm-switch v-model="f.data.passwords" :label="t('profileform.data.passwords')"/>
+          <cm-switch v-model="f.data.history" :label="t('profileform.data.history')"/>
+          <cm-switch v-model="f.data.cache" :label="t('profileform.data.cache')"/>
+          <cm-switch v-model="f.data.siteStorage" :label="t('profileform.data.siteStorage')"/>
+          <cm-field :label="t('profileform.prefs')" :hint="t('profileform.prefsHint')">
+            <div class="flex flex-col gap-2">
+              <div v-for="(r, i) in f.prefs" :key="i" class="flex gap-2 items-center">
+                <input class="input mono flex-[2]" v-model="r.k" :placeholder="t('profileform.prefKey')" autocomplete="off" spellcheck="false">
+                <input class="input mono flex-1" v-model="r.v" :placeholder="t('profileform.prefValue')" autocomplete="off" spellcheck="false">
+                <button type="button" class="btn" @click="f.prefs.splice(i, 1)">{{ t('profileform.prefRemove') }}</button>
+              </div>
+              <div><button type="button" class="btn" @click="addPref">{{ t('profileform.prefAdd') }}</button></div>
+            </div>
+          </cm-field>
         </fieldset>
 
         <fieldset class="m-0 p-0 border-0 flex flex-col gap-2">
