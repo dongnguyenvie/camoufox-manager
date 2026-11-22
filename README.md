@@ -1,8 +1,16 @@
 # Camoufox Manager
 
-A local, single-user macOS app for managing many [Camoufox](https://github.com/daijro/camoufox)
-(Firefox anti-detect) browser profiles, written in Rust. Each profile keeps its own fingerprint, proxy,
-cookies and data. Everything runs on your machine, binds to `127.0.0.1` only, and needs no cloud account.
+A local, self-hosted manager for [Camoufox](https://github.com/daijro/camoufox) anti-detect browser
+profiles, written in Rust. It is a free alternative to GoLogin, AdsPower or Dolphin for people who would
+rather keep everything on their own machine: no cloud account, no subscription, the app binds to
+`127.0.0.1` only.
+
+Each profile is **one long-lived machine**. Its hardware fingerprint is pinned at creation and replayed on
+every launch, with its own proxy, cookies, storage and history, so an account opened from it today still
+looks like the same computer months later. Geography (timezone, locale, geolocation, WebRTC IP) follows the
+assigned proxy, so the profile never contradicts where its traffic comes out.
+
+![The profiles list](docs/assets/screenshot-profiles.png)
 
 ## Features
 
@@ -22,6 +30,13 @@ cookies and data. Everything runs on your machine, binds to `127.0.0.1` only, an
 - Agent leases, a headless `serve` mode, a CLI with an API key, and a doctor report.
 - Device sync between two of your own Macs over Tailscale (see [docs/sync.md](docs/sync.md)).
 - UI in English (default) and Vietnamese, switchable in settings.
+
+## What it looks like
+
+| Proxy library | Settings |
+| --- | --- |
+| ![Proxies](docs/assets/screenshot-proxies.png) | ![Settings](docs/assets/screenshot-settings.png) |
+| Named proxies with check, assign and change-IP. Browsers only ever see a local relay port. | Engine status, one-click Camoufox install, API keys for scripts and agents. |
 
 ## Requirements
 
