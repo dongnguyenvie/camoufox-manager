@@ -282,7 +282,7 @@ dependencies = [
 
 [[package]]
 name = "camoufox-manager"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -379,7 +379,7 @@ dependencies = [
 
 [[package]]
 name = "cm-api"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -397,7 +397,7 @@ dependencies = [
 
 [[package]]
 name = "cm-core"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -410,7 +410,7 @@ dependencies = [
 
 [[package]]
 name = "cm-engine-camoufox"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -427,7 +427,7 @@ dependencies = [
 
 [[package]]
 name = "cm-relay"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -443,7 +443,7 @@ dependencies = [
 
 [[package]]
 name = "cm-service"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -468,7 +468,7 @@ dependencies = [
 
 [[package]]
 name = "cm-store"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -481,7 +481,7 @@ dependencies = [
 
 [[package]]
 name = "cm-sync"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -501,7 +501,7 @@ dependencies = [
 
 [[package]]
 name = "cm-tailscale"
-version = "0.1.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -512,7 +512,7 @@ dependencies = [
 
 [[package]]
 name = "cm-ui"
-version = "0.1.0"
+version = "0.0.1"
 
 [[package]]
 name = "cmake"
