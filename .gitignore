@@ -17,3 +17,6 @@ proxies.txt
 
 # bundled uv download cache
 manager/packaging/.cache/
+
+# planning docs (kept in .local, not in git)
+tasks/
