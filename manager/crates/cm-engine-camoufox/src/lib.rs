@@ -21,6 +21,7 @@ mod lock;
 mod machine;
 mod places;
 mod process;
+mod sitedata;
 mod version;
 
 pub use diag::{HelperState, Orphan, find_orphans, helper_state};
@@ -214,6 +215,17 @@ impl Engine for Camoufox {
         let (ud, bms) = (user_data.clone(), opts.bookmarks.clone());
         if let Ok(Err(e)) = tokio::task::spawn_blocking(move || places::sync(&ud, &bms)).await {
             eprintln!("bookmarks not synced: {e}");
+        }
+
+        // Profiles that do not keep site storage: its data (localStorage etc.) is deleted before launch.
+        // Firefox's shutdown prefs alone do not reliably clear it. Never fatal (same as bookmarks).
+        if !opts.data.site_storage {
+            let ud = user_data.clone();
+            match tokio::task::spawn_blocking(move || sitedata::clear(&ud)).await {
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => eprintln!("site data not cleared: {e}"),
+                Err(e) => eprintln!("site data not cleared: {e}"),
+            }
         }
 
         let mut cmd = Command::new(&self.python);

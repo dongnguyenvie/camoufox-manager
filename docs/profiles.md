@@ -67,7 +67,7 @@ Firefox prefs at each launch:
 | Passwords | `signon.rememberSignons` and `signon.autofillForms` set to false (no saving or autofill) |
 | History | `places.history.enabled` false; history and downloads cleared on shutdown |
 | Cache | `browser.cache.disk.enable` false; cache cleared on shutdown |
-| Site storage | site storage (`offlineApps`) cleared on shutdown |
+| Site storage | site storage (localStorage, IndexedDB, service workers, `offlineApps`) cleared by the app before each launch, and on shutdown |
 
 If history, cache or site storage is off, shutdown clearing is turned on. **Cookies and open sessions are
 never cleared by these toggles**, so logins are kept.
