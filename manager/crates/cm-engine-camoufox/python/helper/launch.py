@@ -13,7 +13,7 @@ import signal
 import sys
 import threading
 
-from common import CANVAS_INIT_JS, ensure_search_engine, apply_screen, canvas_seed, check_timezone, decode_chunks, emit, encode_chunks, parse_size
+from common import CANVAS_INIT_JS, ensure_search_engine, reset_profile_search, apply_screen, canvas_seed, check_timezone, decode_chunks, emit, encode_chunks, parse_size
 
 
 async def cmd_launch(args):
@@ -112,6 +112,7 @@ async def cmd_launch(args):
     encode_chunks(env, "CAMOU_PREFS_", prefs)
 
     os.makedirs(args.user_data, exist_ok=True)
+    reset_profile_search(args.user_data)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     if sys.platform != "win32":

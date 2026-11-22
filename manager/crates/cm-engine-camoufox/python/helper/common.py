@@ -286,3 +286,36 @@ def ensure_search_engine(executable_path):
                 os.replace(tmp, path)
         except Exception as e:  # noqa: BLE001 - search engine is a convenience, the launch goes on
             print(f"search policy: {e}", file=sys.stderr)
+
+
+SEARCH_RESET_MARKER = ".cm-search-reset-v1"
+
+
+def reset_profile_search(user_data):
+    """Once per profile: drop the saved search engine state (`search.json.mozlz4`) and the policy's
+    run-once marker, so the stock engines come back and the `Default: Google` policy is applied.
+    Camoufox's original policy hid every engine in that file, and Firefox keeps them hidden even after
+    the policy changes. Custom engines a user added are lost once; nothing else in the profile is."""
+    import os
+    import re
+
+    marker = os.path.join(user_data, SEARCH_RESET_MARKER)
+    if os.path.exists(marker):
+        return
+    try:
+        for name in ("search.json.mozlz4", "search.json.mozlz4.bak"):
+            path = os.path.join(user_data, name)
+            if os.path.exists(path):
+                os.remove(path)
+        prefs = os.path.join(user_data, "prefs.js")
+        if os.path.exists(prefs):
+            with open(prefs, encoding="utf-8") as f:
+                text = f.read()
+            new = re.sub(r'^user_pref\("browser\.policies\.runOncePerModification\.(setDefaultSearchEngine|removeSearchEngines)".*\n', "", text, flags=re.M)
+            if new != text:
+                with open(prefs, "w", encoding="utf-8") as f:
+                    f.write(new)
+        with open(marker, "w", encoding="utf-8") as f:
+            f.write("search state reset so the stock engines and Google default apply\n")
+    except Exception as e:  # noqa: BLE001 - never block a launch over the search engine
+        print(f"search reset: {e}", file=sys.stderr)
