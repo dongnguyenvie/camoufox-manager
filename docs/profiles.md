@@ -40,3 +40,73 @@ WebSocket endpoint for automation (this is the Playwright protocol, not CDP). St
 Cookies and logins are kept in the profile.
 
 A running profile cannot be replaced by an import or synced; close it first.
+
+## Trash
+
+Deleting a profile moves it to the trash. Its data folder stays on disk, and the profile cannot be started
+while it is in the trash. Trashed profiles do not appear in the list, scheduled launches, sheets or sync.
+
+- **Restore** puts it back in the list, stopped.
+- **Delete forever** removes the record and its data folder.
+- **Empty trash** deletes everything in the trash.
+
+Trashed profiles are kept for `profiles.trash_days` days (default 7, maximum 365). Set it to `0` to delete
+immediately, with no trash. Expired profiles are purged at startup and then every hour.
+
+API: `DELETE /api/profiles/{id}` moves a profile to the trash, `GET /api/profiles/trash` lists it,
+`POST /api/profiles/{id}/restore` restores it, `DELETE /api/profiles/{id}/purge` deletes it for good, and
+`POST /api/profiles/trash/empty` empties the trash.
+
+## Data saving and custom prefs
+
+The **Data** section of a profile has four toggles. All are on by default. Turning one off changes these
+Firefox prefs at each launch:
+
+| Toggle off | Firefox prefs |
+| --- | --- |
+| Passwords | `signon.rememberSignons` and `signon.autofillForms` set to false (no saving or autofill) |
+| History | `places.history.enabled` false; history and downloads cleared on shutdown |
+| Cache | `browser.cache.disk.enable` false; cache cleared on shutdown |
+| Site storage | site storage (`offlineApps`) cleared on shutdown |
+
+If history, cache or site storage is off, shutdown clearing is turned on. **Cookies and open sessions are
+never cleared by these toggles**, so logins are kept.
+
+You can also add custom Firefox prefs (key and value: true/false, a number or text). They are applied last,
+so they win over the toggles. Limits:
+
+- at most 200 prefs; names use letters, digits, `.`, `_` and `-` (up to 200 characters)
+- values are true/false, a number, or text up to 2000 characters
+- these prefix families are reserved and cannot be set (matched in lower case): `network.proxy.`,
+  `media.peerconnection.`, `privacy.resistfingerprinting`, `camoufox.`, `geo.` and `intl.`. They are
+  managed by the app for the fingerprint, WebRTC, geography, locale and proxy.
+
+## Bookmarks
+
+Each profile can hold a list of bookmarks. They are kept in a toolbar folder named **Camoufox Manager**.
+The app manages only that folder. Bookmarks you add by hand in the browser are left alone.
+
+- Before each launch, while the profile is closed, the folder is synced into the profile's `places.sqlite`:
+  missing bookmarks are added, removed ones are deleted, and titles and order are updated.
+- A profile that has never been opened has no `places.sqlite` yet. The first launch skips the sync, so the
+  bookmarks appear from the second start on.
+- If the sync fails (for example the database is locked), the browser still starts and the bookmarks are not
+  refreshed that time.
+
+To import, export your browser's `bookmarks.html` (Netscape format) and send it to
+`POST /api/bookmarks/import`. The response is the parsed list. Nothing is saved until you assign it to a
+profile.
+
+## Block local network
+
+On by default for each profile (set in the profile settings). It stops the browser from reaching your own
+machine and your local network.
+
+- **With a proxy:** the browser is sent through the app's relay for every target, including `localhost` and
+  names Firefox would normally send direct. The relay refuses targets on loopback, private, link-local and
+  CGNAT addresses, and `localhost` names. The refused request gets `403` and nothing is forwarded.
+- **Without a proxy:** there is no relay, so only Firefox's own Local Network Access prefs are set
+  (`network.lna.enabled` and `network.lna.blocking`). Firefox builds that do not have these prefs ignore them.
+
+Limit: the check looks at the target as the browser writes it (an IP address or a name). A public-looking
+name that resolves to a private address is not caught.
