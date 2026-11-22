@@ -7,17 +7,14 @@
 //! 2. the per-profile `app.lock` flock ([`crate::lock`]) is acquirable. The returned
 //!    [`ClosedGuard`] **keeps holding it**, so the profile cannot start (in this or another app
 //!    instance) while a capture or an apply is in progress,
-//! 3. Firefox's own markers are absent: `user-data/lock` (a symlink `<ip>:+<pid>`) naming a live
+//! 3. (Windows: `parent.lock`, which Firefox holds open exclusively: it cannot be opened with
+//!    share mode none while Firefox runs.) Firefox's own markers are absent: `user-data/lock` (a symlink `<ip>:+<pid>`) naming a live
 //!    pid, and a held fcntl lock on `user-data/.parentlock`. A marker left by a dead process is
 //!    stale and ignored, because Firefox itself reclaims it.
 
-use crate::lock::{Acquire, Lock, proc_start};
+use crate::lock::{Acquire, Lock};
 use cm_core::CmError;
-use std::{
-    fs::{self, File},
-    os::fd::AsRawFd,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 /// Keeps the profile closed while alive (holds `app.lock`).
 pub struct ClosedGuard {
@@ -29,7 +26,9 @@ fn conflict(msg: impl Into<String>) -> anyhow::Error {
 }
 
 /// Live-process markers Firefox leaves in a user-data dir (empty = none).
+#[cfg(unix)]
 pub fn firefox_markers(user_data: &Path) -> Vec<String> {
+    use crate::lock::proc_start;
     let mut found = Vec::new();
     // `lock` -> "<ip>:+<pid>" (dangling symlink while Firefox runs).
     if let Ok(target) = fs::read_link(user_data.join("lock")) {
@@ -47,14 +46,32 @@ pub fn firefox_markers(user_data: &Path) -> Vec<String> {
 }
 
 /// Does another process hold an fcntl lock on `path`?
+#[cfg(unix)]
 fn parentlock_held(path: &Path) -> bool {
-    let Ok(f) = File::open(path) else { return false };
+    use std::os::fd::AsRawFd;
+    let Ok(f) = fs::File::open(path) else { return false };
     // SAFETY: F_GETLK on a valid fd with a zeroed flock struct.
     unsafe {
         let mut fl: libc::flock = std::mem::zeroed();
         fl.l_type = libc::F_WRLCK as _;
         fl.l_whence = libc::SEEK_SET as _;
         libc::fcntl(f.as_raw_fd(), libc::F_GETLK, &mut fl) == 0 && i64::from(fl.l_type) != i64::from(libc::F_UNLCK)
+    }
+}
+
+/// Live-process markers Firefox leaves in a user-data dir (empty = none). On Windows Firefox keeps
+/// `parent.lock` open exclusively, so it is running iff the file cannot be opened with share mode
+/// none (a missing file means closed).
+#[cfg(windows)]
+pub fn firefox_markers(user_data: &Path) -> Vec<String> {
+    use std::os::windows::fs::OpenOptionsExt;
+    let path = user_data.join("parent.lock");
+    if !path.exists() {
+        return vec![];
+    }
+    match fs::OpenOptions::new().read(true).share_mode(0).open(&path) {
+        Ok(_) => vec![],
+        Err(_) => vec!["parent.lock".to_string()],
     }
 }
 
@@ -108,6 +125,7 @@ mod tests {
         let _ = fs::remove_dir_all(&d);
     }
 
+    #[cfg(unix)]
     #[test]
     fn firefox_lock_marker_with_live_pid_blocks_but_stale_does_not() {
         let d = tmp("marker");
@@ -122,6 +140,7 @@ mod tests {
         let _ = fs::remove_dir_all(&d);
     }
 
+    #[cfg(unix)]
     #[test]
     fn parentlock_held_by_another_process_blocks() {
         let d = tmp("parent");
@@ -145,6 +164,24 @@ mod tests {
         assert!(prove_closed(&d).is_err());
         let _ = child.kill();
         let _ = child.wait();
+        assert!(prove_closed(&d).is_ok());
+        let _ = fs::remove_dir_all(&d);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn parent_lock_held_exclusively_blocks() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let d = tmp("parentlock");
+        let p = d.join("user-data/parent.lock");
+        assert!(firefox_markers(&d.join("user-data")).is_empty(), "missing file is no marker");
+        fs::write(&p, b"").unwrap();
+        assert!(firefox_markers(&d.join("user-data")).is_empty(), "unopened file is no marker");
+        let held = fs::OpenOptions::new().read(true).write(true).share_mode(0).open(&p).unwrap();
+        assert_eq!(firefox_markers(&d.join("user-data")), vec!["parent.lock".to_string()]);
+        let e = prove_closed(&d).err().expect("running");
+        assert!(e.to_string().contains("parent.lock"), "{e}");
+        drop(held);
         assert!(prove_closed(&d).is_ok());
         let _ = fs::remove_dir_all(&d);
     }

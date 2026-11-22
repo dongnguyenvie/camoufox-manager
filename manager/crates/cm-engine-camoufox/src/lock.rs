@@ -1,16 +1,17 @@
 //! Per-profile lock file `<profile dir>/app.lock` (phase 8).
 //!
-//! The file holds an exclusive `flock` for as long as this process runs the profile, so two app
-//! instances (or any two processes) never open one profile: the kernel drops the lock when the
-//! owner dies, even on `kill -9`. The JSON body is for humans and for recovery:
+//! The file holds an exclusive OS file lock (`File::try_lock`) for as long as this process runs the
+//! profile, so two app instances (or any two processes) never open one profile: the OS drops the
+//! lock when the owner dies, even on `kill -9`. The JSON body is for humans and for recovery:
 //!
 //! ```json
-//! {"v":1,"ownerPid":123,"ownerStart":"Sat Nov 22 18:00:00 2026","helperPid":456,
+//! {"v":1,"ownerPid":123,"ownerStart":"1790000000","helperPid":456,
 //!  "helperStart":"…","startedAt":1790000000,"heartbeat":1790000005}
 //! ```
 //!
 //! `heartbeat` is rewritten every few seconds while the browser runs. A body left behind with
-//! nobody holding the flock means the owner crashed.
+//! nobody holding the lock means the owner crashed. On Windows the lock is taken on the sidecar
+//! `app.lock.guard` (byte-range locks are mandatory there and would hide the body from readers).
 //!
 //! Orphan cleanup matches processes by **command line containing this profile's directory**
 //! (`<root>/profiles/<id>/`: helper `--user-data`, Firefox `-profile`), never by name, so an
@@ -20,13 +21,14 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File, OpenOptions},
     io::Write,
-    os::{fd::AsRawFd, unix::fs::FileExt},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 pub const LOCK_FILE: &str = "app.lock";
+#[cfg(windows)]
+const GUARD_FILE: &str = "app.lock.guard";
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -44,16 +46,19 @@ pub fn now() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
-/// Start time string of a process (`ps -o lstart=`), `None` when it does not exist.
+/// Start time of a process (seconds since the epoch, as text), `None` when it does not exist.
 pub fn proc_start(pid: u32) -> Option<String> {
-    let out = Command::new("/bin/ps").args(["-o", "lstart=", "-p", &pid.to_string()]).stderr(Stdio::null()).output().ok()?;
-    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (out.status.success() && !s.is_empty()).then_some(s)
+    let mut sys = System::new();
+    let p = Pid::from_u32(pid);
+    sys.refresh_processes_specifics(ProcessesToUpdate::Some(&[p]), true, ProcessRefreshKind::nothing());
+    sys.process(p).map(|p| p.start_time().to_string())
 }
 
-/// A held lock. Dropping it releases the flock and clears the body.
+/// A held lock. Dropping it releases the file lock and clears the body.
 pub struct Lock {
     file: File,
+    /// The file that carries the OS lock when it is not `file` itself (Windows sidecar).
+    guard: Option<File>,
     info: LockInfo,
 }
 
@@ -67,15 +72,62 @@ fn open(path: &Path) -> std::io::Result<File> {
     OpenOptions::new().read(true).write(true).create(true).truncate(false).open(path)
 }
 
-fn try_flock(f: &File) -> bool {
-    // SAFETY: plain flock(2) on a valid fd.
-    unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) == 0 }
+#[cfg(unix)]
+fn read_at(f: &File, buf: &mut [u8]) -> std::io::Result<usize> {
+    std::os::unix::fs::FileExt::read_at(f, buf, 0)
+}
+#[cfg(windows)]
+fn read_at(f: &File, buf: &mut [u8]) -> std::io::Result<usize> {
+    std::os::windows::fs::FileExt::seek_read(f, buf, 0)
+}
+
+#[cfg(unix)]
+fn write_at(f: &File, buf: &[u8]) -> std::io::Result<()> {
+    std::os::unix::fs::FileExt::write_all_at(f, buf, 0)
+}
+#[cfg(windows)]
+fn write_at(f: &File, buf: &[u8]) -> std::io::Result<()> {
+    let mut off = 0u64;
+    let mut rest = buf;
+    while !rest.is_empty() {
+        let n = std::os::windows::fs::FileExt::seek_write(f, rest, off)?;
+        if n == 0 {
+            return Err(std::io::ErrorKind::WriteZero.into());
+        }
+        off += n as u64;
+        rest = &rest[n..];
+    }
+    Ok(())
 }
 
 fn read_info(f: &File) -> Option<LockInfo> {
     let mut buf = vec![0u8; 4096];
-    let n = f.read_at(&mut buf, 0).ok()?;
+    let n = read_at(f, &mut buf).ok()?;
     serde_json::from_slice(&buf[..n]).ok()
+}
+
+/// Is the profile's lock free right now? Probing locks and releases at once; the body is never
+/// touched. `None` when there is no lock file.
+pub fn lock_free(dir: &Path) -> Option<bool> {
+    if !dir.join(LOCK_FILE).is_file() {
+        return None;
+    }
+    #[cfg(windows)]
+    let path = dir.join(GUARD_FILE);
+    #[cfg(unix)]
+    let path = dir.join(LOCK_FILE);
+    let f = match OpenOptions::new().read(true).write(true).open(&path) {
+        Ok(f) => f,
+        #[cfg(windows)]
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Some(true),
+        Err(_) => return None,
+    };
+    if f.try_lock().is_ok() {
+        let _ = f.unlock();
+        Some(true)
+    } else {
+        Some(false)
+    }
 }
 
 impl Lock {
@@ -83,9 +135,12 @@ impl Lock {
     /// info is returned so the caller can clean up what that run left behind.
     pub fn acquire(dir: &Path) -> std::io::Result<(Acquire, Option<LockInfo>)> {
         fs::create_dir_all(dir)?;
-        let path = dir.join(LOCK_FILE);
-        let f = open(&path)?;
-        if !try_flock(&f) {
+        let f = open(&dir.join(LOCK_FILE))?;
+        #[cfg(windows)]
+        let guard = Some(open(&dir.join(GUARD_FILE))?);
+        #[cfg(unix)]
+        let guard: Option<File> = None;
+        if guard.as_ref().unwrap_or(&f).try_lock().is_err() {
             return Ok((Acquire::Busy(read_info(&f)), None));
         }
         let stale = read_info(&f).filter(|i| i.owner_pid != 0);
@@ -97,7 +152,7 @@ impl Lock {
             heartbeat: now(),
             ..Default::default()
         };
-        let lock = Lock { file: f, info };
+        let lock = Lock { file: f, guard, info };
         lock.write()?;
         Ok((Acquire::Got(lock), stale))
     }
@@ -105,7 +160,7 @@ impl Lock {
     fn write(&self) -> std::io::Result<()> {
         let body = serde_json::to_vec(&self.info).unwrap_or_default();
         self.file.set_len(0)?;
-        self.file.write_all_at(&body, 0)
+        write_at(&self.file, &body)
     }
 
     pub fn set_helper(&mut self, pid: Option<u32>) {
@@ -124,12 +179,11 @@ impl Drop for Lock {
     fn drop(&mut self) {
         let _ = self.file.set_len(0);
         let _ = self.file.flush();
-        // SAFETY: unlock our own fd (also released when the file closes).
-        unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_UN) };
+        let _ = self.guard.as_ref().unwrap_or(&self.file).unlock();
     }
 }
 
-/// One line of `ps`: pid, process group, full command.
+/// One process: pid, process group (unix; 0 on Windows), full command line.
 pub struct ProcLine {
     pub pid: u32,
     pub pgid: u32,
@@ -137,56 +191,85 @@ pub struct ProcLine {
 }
 
 pub fn ps_all() -> Vec<ProcLine> {
-    let Ok(out) = Command::new("/bin/ps").args(["-axww", "-o", "pid=,pgid=,command="]).stderr(Stdio::null()).output() else {
-        return vec![];
-    };
-    String::from_utf8_lossy(&out.stdout)
-        .lines()
-        .filter_map(|l| {
-            let mut it = l.trim_start().splitn(3, char::is_whitespace);
-            let pid = it.next()?.parse().ok()?;
-            let pgid = it.next()?.trim().parse().ok()?;
-            Some(ProcLine { pid, pgid, cmd: it.next()?.trim().to_string() })
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing().with_cmd(UpdateKind::Always));
+    sys.processes()
+        .iter()
+        .map(|(pid, p)| {
+            let pid = pid.as_u32();
+            let cmd = p.cmd().iter().map(|a| a.to_string_lossy()).collect::<Vec<_>>().join(" ");
+            #[cfg(unix)]
+            // SAFETY: getpgid(2) only reads a process attribute.
+            let pgid = unsafe { libc::getpgid(pid as libc::pid_t) }.max(0) as u32;
+            #[cfg(windows)]
+            let pgid = 0;
+            ProcLine { pid, pgid, cmd }
         })
         .collect()
 }
 
-/// Processes whose command line mentions `<dir>/` (the profile directory).
-pub fn procs_of(dir: &Path, all: &[ProcLine]) -> Vec<(u32, u32)> {
-    let needle = format!("{}/", dir.display());
-    let me = std::process::id();
-    all.iter().filter(|p| p.pid != me && p.cmd.contains(&needle)).map(|p| (p.pid, p.pgid)).collect()
+/// Path text as compared against command lines (Windows: case-insensitive, backslashes).
+fn norm(s: &str) -> String {
+    if cfg!(windows) { s.replace('/', "\\").to_lowercase() } else { s.to_string() }
 }
 
+/// Processes whose command line mentions `<dir>/` (the profile directory).
+pub fn procs_of(dir: &Path, all: &[ProcLine]) -> Vec<(u32, u32)> {
+    let needle = norm(&format!("{}{}", dir.display(), std::path::MAIN_SEPARATOR));
+    let me = std::process::id();
+    all.iter().filter(|p| p.pid != me && norm(&p.cmd).contains(&needle)).map(|p| (p.pid, p.pgid)).collect()
+}
+
+#[cfg(unix)]
 fn signal(pid: i64, sig: i32) {
     // SAFETY: kill(2); negative pid = process group.
     unsafe { libc::kill(pid as libc::pid_t, sig) };
 }
 
-/// Stop the matched processes: SIGTERM their groups/pids, wait, then SIGKILL what is left.
-/// Returns the pids that were running.
-pub fn kill_procs(found: &[(u32, u32)]) -> Vec<u32> {
-    if found.is_empty() {
-        return vec![];
-    }
-    let my_pgid = unsafe { libc::getpgrp() } as u32;
-    let send = |sig: i32| {
-        for &(pid, pgid) in found {
-            // The helper leads its own group (pgid == its pid): take Firefox's children along.
-            if pgid > 1 && pgid != my_pgid {
-                signal(-(pgid as i64), sig);
-            }
-            signal(pid as i64, sig);
-        }
-    };
-    send(libc::SIGTERM);
+fn wait_gone(found: &[(u32, u32)]) {
     for _ in 0..40 {
         if found.iter().all(|&(pid, _)| proc_start(pid).is_none()) {
             break;
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    send(libc::SIGKILL);
+}
+
+/// Stop the matched processes (unix: SIGTERM their groups/pids, wait, then SIGKILL what is left;
+/// Windows: terminate them). Returns the pids that were running.
+pub fn kill_procs(found: &[(u32, u32)]) -> Vec<u32> {
+    if found.is_empty() {
+        return vec![];
+    }
+    #[cfg(unix)]
+    {
+        // SAFETY: getpgrp(2) has no failure mode.
+        let my_pgid = unsafe { libc::getpgrp() } as u32;
+        let send = |sig: i32| {
+            for &(pid, pgid) in found {
+                // The helper leads its own group (pgid == its pid): take Firefox's children along.
+                if pgid > 1 && pgid != my_pgid {
+                    signal(-(pgid as i64), sig);
+                }
+                signal(pid as i64, sig);
+            }
+        };
+        send(libc::SIGTERM);
+        wait_gone(found);
+        send(libc::SIGKILL);
+    }
+    #[cfg(windows)]
+    {
+        let pids: Vec<Pid> = found.iter().map(|f| Pid::from_u32(f.0)).collect();
+        let mut sys = System::new();
+        sys.refresh_processes_specifics(ProcessesToUpdate::Some(&pids), true, ProcessRefreshKind::nothing());
+        for p in &pids {
+            if let Some(proc_) = sys.process(*p) {
+                proc_.kill();
+            }
+        }
+        wait_gone(found);
+    }
     found.iter().map(|f| f.0).collect()
 }
 
@@ -238,11 +321,13 @@ mod tests {
         let (Acquire::Got(mut a), stale) = Lock::acquire(&d).unwrap() else { panic!("free") };
         assert!(stale.is_none());
         a.set_helper(Some(std::process::id()));
+        assert_eq!(lock_free(&d), Some(false));
         match Lock::acquire(&d).unwrap().0 {
             Acquire::Busy(Some(i)) => assert_eq!(i.owner_pid, std::process::id()),
             _ => panic!("must be busy"),
         }
         drop(a);
+        assert_eq!(lock_free(&d), Some(true));
         assert!(matches!(Lock::acquire(&d).unwrap().0, Acquire::Got(_)));
         let _ = fs::remove_dir_all(&d);
     }
@@ -258,5 +343,11 @@ mod tests {
         // This test process's own command line does not contain the temp profile dir.
         assert!(procs_of(&d, &ps_all()).is_empty());
         let _ = fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn own_process_is_found_by_start_time() {
+        assert!(proc_start(std::process::id()).is_some());
+        assert!(proc_start(999_999_999).is_none());
     }
 }

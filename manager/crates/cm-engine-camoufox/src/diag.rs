@@ -3,8 +3,7 @@
 
 use crate::{helper, lock};
 use std::{
-    fs::{self, OpenOptions},
-    os::fd::AsRawFd,
+    fs,
     path::Path,
 };
 
@@ -41,21 +40,6 @@ pub struct Orphan {
     pub stale_lock: bool,
 }
 
-/// Is the profile's lock free right now? Probing takes the flock and gives it back at once; the
-/// lock file's content is never touched.
-fn lock_free(dir: &Path) -> Option<bool> {
-    let f = OpenOptions::new().read(true).write(true).open(dir.join(lock::LOCK_FILE)).ok()?;
-    // SAFETY: flock(2) on a valid fd; released right away (and when `f` closes).
-    unsafe {
-        if libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) == 0 {
-            libc::flock(f.as_raw_fd(), libc::LOCK_UN);
-            Some(true)
-        } else {
-            Some(false)
-        }
-    }
-}
-
 /// Leftover helper/browser processes and stale locks under `<root>/profiles/`. Same matching as the
 /// startup cleanup (`lock::recover_orphans`: command line containing the profile directory, never
 /// the process name), but report-only. A profile whose lock is held by a live owner (a browser this
@@ -77,7 +61,7 @@ pub fn find_orphans(root: &Path) -> Vec<Orphan> {
         if pids.is_empty() && !has_lock_file {
             continue;
         }
-        if has_lock_file && lock_free(&dir) == Some(false) {
+        if has_lock_file && lock::lock_free(&dir) == Some(false) {
             continue; // owned by a live process
         }
         let stale_lock =
