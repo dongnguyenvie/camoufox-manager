@@ -3,7 +3,6 @@
 use anyhow::Result;
 use base64::Engine;
 use sha2::{Digest, Sha256};
-use std::io::Read;
 
 pub fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
@@ -55,7 +54,7 @@ pub fn base32(b: &[u8]) -> String {
 /// `n` random bytes from the OS (macOS target: `/dev/urandom` is always there).
 pub fn random(n: usize) -> Result<Vec<u8>> {
     let mut buf = vec![0u8; n];
-    std::fs::File::open("/dev/urandom")?.read_exact(&mut buf)?;
+    getrandom::fill(&mut buf).map_err(|e| anyhow::anyhow!("cannot read OS randomness: {e}"))?;
     Ok(buf)
 }
 

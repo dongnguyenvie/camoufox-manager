@@ -311,7 +311,14 @@ mod tests {
     #[test]
     fn running_profile_is_refused() {
         let d = tmp("running");
+        #[cfg(unix)]
         std::os::unix::fs::symlink(format!("127.0.0.1:+{}", std::process::id()), d.join("lock")).unwrap();
+        #[cfg(windows)]
+        let _held = {
+            use std::os::windows::fs::OpenOptionsExt;
+            fs::write(d.join("parent.lock"), b"").unwrap();
+            fs::OpenOptions::new().read(true).write(true).share_mode(0).open(d.join("parent.lock")).unwrap()
+        };
         for r in [export(&d).map(|_| ()), import(&d, &[], CookieImportMode::All).map(|_| ())] {
             let e = r.unwrap_err();
             assert!(matches!(e.downcast_ref::<CmError>(), Some(CmError::Conflict(_))), "{e}");

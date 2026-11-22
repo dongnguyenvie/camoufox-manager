@@ -11,13 +11,16 @@
 //! so the loops are tested without a server.
 
 use crate::client::PeerError;
+#[cfg(not(unix))]
+use crate::identity::OpenOptionsExt;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
-    os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -149,9 +152,8 @@ impl Store {
     }
 
     pub fn ensure_dir(&self) -> std::io::Result<()> {
-        use std::os::unix::fs::PermissionsExt;
         fs::create_dir_all(&self.dir)?;
-        fs::set_permissions(&self.dir, fs::Permissions::from_mode(0o700))
+        crate::identity::set_mode(&self.dir, 0o700)
     }
 
     pub fn save(&self, m: &Meta) -> std::io::Result<()> {

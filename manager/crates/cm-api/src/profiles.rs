@@ -58,7 +58,7 @@ async fn delete_profile(State(m): State<Shared>, Path(id): Path<String>) -> ApiR
 }
 
 async fn reveal(State(m): State<Shared>, Path(id): Path<String>) -> ApiResult {
-    std::process::Command::new("open").arg(m.profile_dir(&id).await?).spawn()?;
+    std::process::Command::new(super::opener()).arg(m.profile_dir(&id).await?).spawn()?;
     ok(json!({ "ok": true }))
 }
 

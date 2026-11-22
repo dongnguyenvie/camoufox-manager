@@ -20,7 +20,7 @@ cookies and data. Everything runs on your machine, binds to `127.0.0.1` only, an
 
 ## Requirements
 
-- macOS 11 or later and a Rust toolchain (the app is built from source).
+- macOS 11 or later, or Windows 10/11 x64 (see [Windows](#windows)), and a Rust toolchain (the app is built from source).
 - The packaged app ships [uv](https://docs.astral.sh/uv/) (MIT, license in `Contents/Resources/licenses`). Running from source needs `brew install uv` for the Camoufox setup script (optional, see below).
 - For device sync only: the Tailscale app.
 
@@ -57,6 +57,29 @@ Package a macOS app bundle:
 cd manager
 ./packaging/bundle-macos.sh    # -> manager/dist/Camoufox Manager.app
 ```
+
+## Windows
+
+Windows 10 or 11, x64. The window uses WebView2, which is preinstalled on current Windows 10/11.
+Build from source with the MSVC Rust toolchain:
+
+```powershell
+cd manager
+cargo run --release            # desktop window
+cargo run --release -- serve   # headless server on http://127.0.0.1:7878
+```
+
+Package a plain zip (no installer, not signed):
+
+```powershell
+cd manager
+powershell -NoProfile -ExecutionPolicy Bypass -File packaging\bundle-windows.ps1   # -> manager\dist\camoufox-manager-<version>-windows-x64.zip
+```
+
+The zip holds `camoufox-manager.exe`, `uv.exe` (pinned release, SHA-256 checked) and `licenses\`. Unzip it
+anywhere and run `camoufox-manager.exe`. Camoufox is installed from the app, as on macOS.
+
+Data lives in `%APPDATA%\camoufox-manager\` (the database is `camoufox-manager.db`).
 
 ## Configuration
 
