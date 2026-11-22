@@ -4,11 +4,12 @@
 //! | route | |
 //! |---|---|
 //! | `GET /api/proxies` | library |
-//! | `POST /api/proxies` | create `{name, scheme, host, port, username?, password?}` |
+//! | `POST /api/proxies` | create `{name, scheme, host, port, username?, password?, rotateUrl?, rotateOnStart?}` |
 //! | `PUT /api/proxies/{id}` | replace; omit `password` to keep it, `clearPassword: true` to remove |
 //! | `DELETE /api/proxies/{id}` | delete (unassigns from profiles) |
 //! | `POST /api/proxies/import` | `{text}`; 400 `{rejected:[{line,code}]}` when any line is bad |
 //! | `POST /api/proxies/{id}/check` | check through the relay |
+//! | `POST /api/proxies/{id}/rotate` | call the change-IP link, then re-check; `{ok, geo?, error?}` |
 //! | `POST /api/proxies/{id}/assign` | `{profileIds}` one proxy → many profiles |
 //! | `POST /api/proxies/assign-sequence` | `{profileIds, proxyIds?, dryRun?}` |
 //! | `POST /api/profiles/{id}/assign` | `{proxyId}` single profile |
@@ -43,6 +44,10 @@ struct ProxyBody {
     password: Option<String>,
     #[serde(default)]
     clear_password: bool,
+    #[serde(default)]
+    rotate_url: Option<String>,
+    #[serde(default)]
+    rotate_on_start: bool,
 }
 
 impl ProxyBody {
@@ -54,6 +59,8 @@ impl ProxyBody {
             port: self.port,
             username: self.username,
             password: self.password,
+            rotate_url: self.rotate_url,
+            rotate_on_start: self.rotate_on_start,
         };
         (p, self.clear_password)
     }
@@ -92,6 +99,10 @@ async fn check_proxy(State(m): State<Shared>, Path(id): Path<ProxyId>) -> ApiRes
     ok(m.check_proxy(id, true).await?)
 }
 
+async fn rotate(State(m): State<Shared>, Path(id): Path<ProxyId>) -> ApiResult {
+    ok(m.rotate_ip(id).await?)
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AssignBody {
@@ -124,6 +135,7 @@ pub fn routes() -> Router<Shared> {
         .route("/api/proxies/assign-sequence", post(assign_sequence))
         .route("/api/proxies/{id}", axum::routing::put(update).delete(delete))
         .route("/api/proxies/{id}/check", post(check_proxy))
+        .route("/api/proxies/{id}/rotate", post(rotate))
         .route("/api/proxies/{id}/assign", post(assign_many))
         .route("/api/profiles/{id}/assign", post(assign))
 }

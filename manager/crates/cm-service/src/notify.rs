@@ -36,6 +36,7 @@ pub fn compose(kind: &str, p: &Value) -> (String, String) {
         "schedule.failed" => ("Scheduled run failed".into(), format!("{} on {}: {}", s("schedule"), s("profile"), s("message"))),
         "schedule.finished" => ("Scheduled run finished".into(), format!("{} on {}", s("schedule"), s("profile"))),
         "proxy.check_failed" => ("Proxy check failed".into(), format!("{}: {}", s("proxy"), s("error"))),
+        "proxy.rotate_failed" => ("Change IP failed".into(), format!("{}: {}", s("proxy"), s("error"))),
         "transfer.export_finished" => ("Profile export finished".into(), s("name")),
         "transfer.import_finished" => ("Profile import finished".into(), s("name")),
         "sheets.export_finished" => ("Spreadsheet export finished".into(), s("name")),

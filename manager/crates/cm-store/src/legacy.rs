@@ -71,7 +71,15 @@ fn parse_line(line: &str) -> Option<NewProxy> {
         4 => (Some(p[2].to_string()), Some(p[3].to_string())),
         _ => return None,
     };
-    Some(NewProxy { name: format!("{host}:{port}"), scheme: ProxyScheme::Http, host: host.into(), port, username, password })
+    Some(NewProxy {
+        name: format!("{host}:{port}"),
+        scheme: ProxyScheme::Http,
+        host: host.into(),
+        port,
+        username,
+        password,
+        ..Default::default()
+    })
 }
 
 /// Insert every valid line of a proxies.txt; a line equal to a stored proxy (scheme, host, port,

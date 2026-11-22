@@ -748,6 +748,7 @@ impl Manager {
                     port: info.port,
                     username: info.username.clone(),
                     password: info.password.clone(),
+                    ..Default::default()
                 };
                 match self.create_proxy(np.clone()).await {
                     Ok(v) => v.id,
