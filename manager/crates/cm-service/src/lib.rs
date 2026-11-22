@@ -87,6 +87,8 @@ struct Running {
     started_at: u64,
     /// Whether its relay filters local-network targets (profile setting, default on).
     block_local: bool,
+    /// Direct relay (no upstream) of a profile without a proxy whose local network is blocked.
+    direct_relay: Option<JoinHandle<()>>,
 }
 
 pub struct Manager {

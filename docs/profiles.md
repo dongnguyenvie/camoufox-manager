@@ -105,8 +105,14 @@ machine and your local network.
 - **With a proxy:** the browser is sent through the app's relay for every target, including `localhost` and
   names Firefox would normally send direct. The relay refuses targets on loopback, private, link-local and
   CGNAT addresses, and `localhost` names. The refused request gets `403` and nothing is forwarded.
-- **Without a proxy:** there is no relay, so only Firefox's own Local Network Access prefs are set
-  (`network.lna.enabled` and `network.lna.blocking`). Firefox builds that do not have these prefs ignore them.
+- **Without a proxy:** the browser still goes through a small local relay that has no upstream and
+  connects straight to the target. It applies the same rules, and also resolves names itself: a name that
+  resolves to a loopback, private, link-local or CGNAT address is refused too. Location, timezone and
+  WebRTC behave as for a profile with no proxy (the relay is not treated as a proxy). The relay starts
+  with the profile and stops when it stops or crashes. Firefox's own Local Network Access prefs
+  (`network.lna.enabled`, `network.lna.blocking`) are also set; builds without them ignore them.
 
-Limit: the check looks at the target as the browser writes it (an IP address or a name). A public-looking
-name that resolves to a private address is not caught.
+Limit (with a proxy): the check looks at the target as the browser writes it (an IP address or a name). A
+public-looking name that resolves to a private address is not caught, because the proxy resolves names
+remotely.
+

@@ -2,7 +2,7 @@
 //! has "block local network" on. Only the browser's requested destination is checked, never the
 //! upstream proxy (which may legitimately sit on a LAN address).
 //!
-//! Hostnames are not resolved here: the relay never does local DNS (the upstream resolves them
+//! Hostnames are not resolved here (direct mode, `run_direct`, also checks the resolved IPs): the relay never does local DNS (the upstream resolves them
 //! remotely), so only `localhost` / `*.localhost` names and IP literals (including the legacy
 //! `inet_aton` spellings such as `2130706433` or `0x7f.1`) are recognised.
 

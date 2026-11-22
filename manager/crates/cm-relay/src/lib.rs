@@ -13,10 +13,14 @@
 //! - `socks4a` / `socks4`: SOCKS4a with remote DNS, no auth (username becomes the user id);
 //!   IPv6 destinations are refused. Plain `socks4` is treated as 4a: it never resolves locally.
 //!
+//! [`run_direct`] is the no-upstream variant for profiles without a proxy: it connects straight to
+//! the target (resolving names locally) and refuses local-network targets, resolved IPs included.
+//!
 //! Also: [`parse_proxy_url`] for `scheme://user:pass@host:port` strings, and `check`
 //! ([`IpApiChecker`], phase 2).
 
 mod check;
+mod direct;
 mod filter;
 mod http;
 mod https;
@@ -26,6 +30,7 @@ mod target;
 mod url;
 
 pub use check::IpApiChecker;
+pub use direct::run_direct;
 pub use filter::{is_local, is_local_v4, is_local_v6};
 pub use target::Dest;
 pub use url::parse_proxy_url;

@@ -9,7 +9,7 @@ the camoufox venv's python:  python <data_dir>/camoufox/helper <command> ...
   generate --os win|mac|lin                                   (generate.py)
       Generates the pinned machine ONCE with Camoufox's generator and prints the final
       Camoufox config as JSON. The app stores it in the database.
-  launch --profile <launch.json> --user-data <dir> [--proxy URL]
+  launch --profile <launch.json> --user-data <dir> [--proxy URL [--direct-proxy]]
          [--timezone TZ] [--geo=LAT,LON] [--ip IP] [--headless] [--locale L]
          [--webrtc replace|real|forward|none] [--screen WxH] [--window WxH] [--fonts JSON]
          [--humanize] [--start-url URL] [--canvas unique|native|random] [--extension-prefs]   (launch.py)
@@ -49,6 +49,7 @@ def main():
     l.add_argument("--profile", required=True)
     l.add_argument("--user-data", required=True)
     l.add_argument("--proxy")
+    l.add_argument("--direct-proxy", action="store_true", help="--proxy is the app's no-upstream relay: WebRTC as without a proxy")
     l.add_argument("--timezone")
     # Pass as --geo=LAT,LON: a negative latitude would otherwise look like an option to argparse.
     l.add_argument("--geo")

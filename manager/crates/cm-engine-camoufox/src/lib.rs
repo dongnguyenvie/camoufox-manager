@@ -233,6 +233,9 @@ impl Engine for Camoufox {
         // Only ever the app's local relay 127.0.0.1:port — never upstream credentials.
         if let Some((host, port)) = &opts.proxy {
             cmd.arg("--proxy").arg(format!("http://{host}:{port}"));
+            if opts.direct_proxy {
+                cmd.arg("--direct-proxy");
+            }
         }
         if let Some(tz) = &opts.timezone {
             cmd.arg("--timezone").arg(tz);
