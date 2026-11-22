@@ -13,7 +13,7 @@ import signal
 import sys
 import threading
 
-from common import CANVAS_INIT_JS, apply_screen, canvas_seed, check_timezone, decode_chunks, emit, encode_chunks, parse_size
+from common import CANVAS_INIT_JS, ensure_search_engine, apply_screen, canvas_seed, check_timezone, decode_chunks, emit, encode_chunks, parse_size
 
 
 async def cmd_launch(args):
@@ -61,6 +61,7 @@ async def cmd_launch(args):
     # Identical launch_options inputs every time -> the fingerprint (fonts, GPU, voices...) stays.
     # geoip=False so Camoufox does not look up the IP itself and override the app's geo/timezone.
     opts = launch_options(config=config, headless=args.headless, geoip=False, i_know_what_im_doing=True, **kwargs)
+    ensure_search_engine(opts["executable_path"])
 
     # Geo/timezone/IP of the proxy are applied AFTER, without touching the fingerprint seed.
     env = opts["env"]

@@ -121,3 +121,11 @@ Limit (with a proxy): the check looks at the target as the browser writes it (an
 public-looking name that resolves to a private address is not caught, because the proxy resolves names
 remotely.
 
+
+## Search engine
+
+Camoufox ships with every search engine removed and a dummy "None" engine, so typing words in the
+address bar goes nowhere. Before each launch the app restores the stock engines in the installed
+Camoufox build and makes Google the default (`distribution/policies.json`, `SearchEngines` only).
+Firefox reads this policy per install, not per profile, so it applies to every profile; it is reapplied
+after a Camoufox update. A policy you edited by hand is left alone.

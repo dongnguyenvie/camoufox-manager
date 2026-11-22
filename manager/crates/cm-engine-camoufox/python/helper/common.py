@@ -237,3 +237,52 @@ def canvas_seed(config, profile_id):
     if isinstance(s, int) and 0 <= s < 2**32:
         return s
     return int.from_bytes(hashlib.sha256(("cm-canvas:" + str(profile_id)).encode()).digest()[:4], "big")
+
+
+def search_policy_files(executable_path):
+    """Candidate `distribution/policies.json` files of the Camoufox build that runs `executable_path`.
+
+    macOS: <App>.app/Contents/MacOS/<exe> -> Contents/Resources/distribution; Windows/Linux: next to the exe.
+    """
+    import os
+
+    exe_dir = os.path.dirname(os.path.abspath(executable_path))
+    return [
+        os.path.join(exe_dir, "..", "Resources", "distribution", "policies.json"),
+        os.path.join(exe_dir, "distribution", "policies.json"),
+    ]
+
+
+def patch_search_policy(policies):
+    """Camoufox ships a dummy "None" search engine that posts to http://127.0.0.1 and removes every real
+    one, so typing in the address bar fails. Profiles here are used by people, so restore the stock
+    engines with Google as the default. Only Camoufox's own dummy setup is replaced, so a policy the
+    user edited by hand is left alone. Returns True when `policies` changed."""
+    p = policies.get("policies")
+    se = p.get("SearchEngines") if isinstance(p, dict) else None
+    if not isinstance(se, dict) or se.get("Default") != "None":
+        return False
+    keep = {k: se[k] for k in ("PreventInstalls",) if k in se}
+    p["SearchEngines"] = {**keep, "Default": "Google"}
+    return True
+
+
+def ensure_search_engine(executable_path):
+    """Apply `patch_search_policy` to the installed build. Firefox only reads policies from the install
+    (a per-profile `browser.policies.alternatePath` is ignored), so this is per install; it is redone
+    after a Camoufox update. Never blocks a launch."""
+    import os
+
+    for path in search_policy_files(executable_path):
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            if patch_search_policy(data):
+                tmp = path + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+                os.replace(tmp, path)
+        except Exception as e:  # noqa: BLE001 - search engine is a convenience, the launch goes on
+            print(f"search policy: {e}", file=sys.stderr)
