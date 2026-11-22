@@ -25,7 +25,7 @@ async fn start_relay(up: Upstream, tls: Option<Arc<rustls::ClientConfig>>) -> u1
     let l = crate::bind(0).await.unwrap();
     let port = l.local_addr().unwrap().port();
     match tls {
-        Some(t) => tokio::spawn(run_with_tls(l, up, t)),
+        Some(t) => tokio::spawn(run_with_tls(l, up, t, false)),
         None => tokio::spawn(run(l, up)),
     };
     port
@@ -399,6 +399,69 @@ async fn https_upstream_that_speaks_plain_tcp_fails_closed() {
     });
     let relay = start_relay(up(ProxyScheme::Https, port, None), Some(client_tls_trusting_fake())).await;
     assert!(browser_connect(relay, "example.com:443").await.is_empty());
+}
+
+// ---------- block local network ----------
+
+/// Upstream HTTP proxy on loopback (a LAN upstream must stay usable) that answers 200 and counts connections.
+async fn counting_upstream() -> (u16, Arc<std::sync::atomic::AtomicUsize>) {
+    let l = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = l.local_addr().unwrap().port();
+    let n = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let n2 = n.clone();
+    tokio::spawn(async move {
+        loop {
+            let Ok((mut s, _)) = l.accept().await else { return };
+            n2.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            tokio::spawn(async move {
+                let mut buf = [0u8; 2048];
+                let _ = s.read(&mut buf).await;
+                let _ = s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok").await;
+            });
+        }
+    });
+    (port, n)
+}
+
+async fn start_filtered(up: Upstream, block: bool) -> u16 {
+    let l = crate::bind(0).await.unwrap();
+    let port = l.local_addr().unwrap().port();
+    tokio::spawn(crate::run_filtered(l, up, block));
+    port
+}
+
+#[tokio::test]
+async fn block_local_refuses_local_targets_but_not_the_upstream() {
+    let (up_port, hits) = counting_upstream().await;
+    let relay = start_filtered(up(ProxyScheme::Http, up_port, None), true).await;
+    for (url, host) in [
+        ("http://127.0.0.1:8080/", "127.0.0.1"),
+        ("http://localhost/x", "localhost"),
+        ("http://192.168.1.1/", "192.168.1.1"),
+        ("http://[::1]:3000/", "[::1]"),
+        ("http://foo.localhost/", "foo.localhost"),
+        ("http://2130706433/", "2130706433"),
+    ] {
+        let r = text(&browser_get(relay, (url, host)).await);
+        assert!(r.starts_with("HTTP/1.1 403"), "{url}: {r}");
+    }
+    for a in ["127.0.0.1:22", "10.0.0.5:443", "[fd00::1]:443", "100.64.0.1:80", "169.254.169.254:80"] {
+        assert!(text(&browser_connect(relay, a).await).starts_with("HTTP/1.1 403"), "{a}");
+    }
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 0, "nothing reached the upstream");
+    // A public target still goes through (the upstream itself is on 127.0.0.1).
+    let r = text(&browser_get(relay, ("http://example.com/", "example.com")).await);
+    assert!(r.ends_with("ok"), "{r}");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn block_local_off_forwards_local_targets() {
+    let (up_port, hits) = counting_upstream().await;
+    let relay = start_filtered(up(ProxyScheme::Http, up_port, None), false).await;
+    let r = text(&browser_get(relay, ("http://127.0.0.1:8080/", "127.0.0.1")).await);
+    assert!(r.ends_with("ok"), "{r}");
+    assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
 }
 
 #[test]

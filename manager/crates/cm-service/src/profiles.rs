@@ -218,7 +218,7 @@ impl Manager {
             // Relay up and geo known BEFORE the browser opens: dead proxy → no browser (fail-closed).
             let proxy = self.proxy(pid).await?;
             self.rotate_on_start(&proxy).await;
-            let p = self.ensure_relay(&proxy).await?;
+            let p = self.ensure_relay(&proxy, profile.settings.block_local_network.unwrap_or(true)).await?;
             let g = match self.check_proxy(pid, false).await {
                 Ok(g) => g,
                 Err(e) => {
@@ -248,10 +248,16 @@ impl Manager {
             }
         };
         let now = self.d.clock.now();
-        self.running
-            .lock()
-            .await
-            .insert(id.to_string(), Running { ws: session.ws_url.clone(), proxy: profile.proxy_id, port, started_at: now });
+        self.running.lock().await.insert(
+            id.to_string(),
+            Running {
+                ws: session.ws_url.clone(),
+                proxy: profile.proxy_id,
+                port,
+                started_at: now,
+                block_local: profile.settings.block_local_network.unwrap_or(true),
+            },
+        );
         let _ = self.d.profiles.touch(id, &cm_core::clock::iso(now)).await;
         Ok(StartResult { ws: session.ws_url, port, geo, already: false })
     }
@@ -617,6 +623,7 @@ pub(crate) fn launch_options_for(p: &Profile, geo: Option<&ProxyCheck>, port: Op
         canvas_native: s.canvas == CanvasMode::Native,
         data: s.data,
         custom_prefs: s.custom_prefs.clone(),
+        block_local_network: s.block_local_network.unwrap_or(true),
         ..Default::default()
     };
     o.timezone = s.timezone.clone().or_else(|| geo.map(|g| g.timezone.clone()).filter(|t| !t.is_empty()));

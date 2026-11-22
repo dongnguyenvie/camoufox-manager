@@ -85,6 +85,9 @@ pub struct LaunchOptions {
     pub data: crate::profile::DataSaving,
     /// Extra browser prefs from the profile, applied last (already validated).
     pub custom_prefs: std::collections::BTreeMap<String, serde_json::Value>,
+    /// Block local-network access (profile setting, default on): the engine sets the prefs that
+    /// send localhost / LAN requests through the proxy relay, which refuses them.
+    pub block_local_network: bool,
 }
 
 /// A running browser, remote-controllable at `ws_url` (protocol: [`Engine::ws_protocol`]).

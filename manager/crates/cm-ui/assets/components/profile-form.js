@@ -52,6 +52,8 @@ I18N.add({
     'profileform.fonts': 'Extra fonts',
     'profileform.fontsHint': 'One per line, added to the pinned font list ({n} fonts).',
     'profileform.humanize': 'Humanize cursor movement',
+    'profileform.blockLocal': 'Block local network access',
+    'profileform.blockLocalHint': 'Stops pages from probing localhost and your LAN (port scans). Applies to profiles with a proxy; without a proxy only the browser\'s own protection is used.',
     'profileform.canvas': 'Canvas and WebGL',
     'profileform.canvas.stable': 'Unique: own per-profile value, same on every launch (recommended)',
     'profileform.canvas.native': 'Native: this Mac\'s real rendering, shared by all profiles here',
@@ -128,6 +130,8 @@ I18N.add({
     'profileform.fonts': 'Font thêm',
     'profileform.fontsHint': 'Mỗi dòng một font, thêm vào danh sách font đã ghim ({n} font).',
     'profileform.humanize': 'Di chuyển chuột giống người',
+    'profileform.blockLocal': 'Chặn truy cập mạng nội bộ',
+    'profileform.blockLocalHint': 'Ngăn trang web dò localhost và mạng LAN của bạn (quét cổng). Áp dụng cho profile có proxy; không có proxy thì chỉ dùng cơ chế bảo vệ sẵn có của trình duyệt.',
     'profileform.canvas': 'Canvas và WebGL',
     'profileform.canvas.stable': 'Riêng: mỗi profile một giá trị, giữ nguyên mỗi lần mở (khuyên dùng)',
     'profileform.canvas.native': 'Gốc: cách vẽ thật của máy Mac này, mọi profile ở đây giống nhau',
@@ -173,7 +177,7 @@ CM.components.CmProfileForm = {
   emits: ['close', 'saved'],
   setup(props, { emit }) {
     const { reactive, ref, computed, watch } = Vue;
-    const f = reactive({ name: '', notes: '', os: 'win', startUrl: '', screen: '', window: '', locale: '', timezone: '', webrtc: 'replace', fonts: '', humanize: false, canvas: 'stable', data: { passwords: true, history: true, cache: true, siteStorage: true }, prefs: [] });
+    const f = reactive({ name: '', notes: '', os: 'win', startUrl: '', screen: '', window: '', locale: '', timezone: '', webrtc: 'replace', fonts: '', humanize: false, blockLocal: true, canvas: 'stable', data: { passwords: true, history: true, cache: true, siteStorage: true }, prefs: [] });
     const view = ref(null);          // snapshot shown in the machine panel (replaced after a regenerate)
     const busy = ref(false), error = ref(''), osPrompt = ref(false);
     const regen = reactive({ open: false, os: 'win', busy: false });
@@ -184,7 +188,7 @@ CM.components.CmProfileForm = {
       Object.assign(f, {
         name: p.name, notes: p.notes || '', os: p.os, startUrl: s.startUrl || '', screen: s.screen || '', window: s.window || '',
         locale: s.locale || '', timezone: s.timezone || '', webrtc: s.webrtc || 'replace', fonts: (s.fonts || []).join('\n'),
-        humanize: !!s.humanize, canvas: s.canvas || 'stable',
+        humanize: !!s.humanize, blockLocal: s.blockLocalNetwork !== false, canvas: s.canvas || 'stable',
         data: { passwords: true, history: true, cache: true, siteStorage: true, ...(s.data || {}) },
         prefs: Object.entries(s.customPrefs || {}).map(([k, v]) => ({ k, v: String(v) })),
       });
@@ -233,7 +237,7 @@ CM.components.CmProfileForm = {
         locale: f.locale.trim() || null, timezone: f.timezone.trim() || null, webrtc: f.webrtc,
         window: f.window.trim() || null, screen: f.screen.trim() || null, startUrl: f.startUrl.trim() || null,
         humanize: f.humanize, fonts: f.fonts.split('\n').map(x => x.trim()).filter(Boolean), canvas: f.canvas,
-        data: { ...f.data }, customPrefs: customPrefs(),
+        data: { ...f.data }, customPrefs: customPrefs(), blockLocalNetwork: f.blockLocal ? null : false,
       },
     });
     async function save(osAction) {
@@ -319,6 +323,10 @@ CM.components.CmProfileForm = {
             <textarea class="input mono" rows="3" v-model="f.fonts" spellcheck="false"></textarea>
           </cm-field>
           <div class="col-span-full"><cm-switch v-model="f.humanize" :label="t('profileform.humanize')"/></div>
+          <div class="col-span-full">
+            <cm-switch v-model="f.blockLocal" :label="t('profileform.blockLocal')"/>
+            <p class="m-0 mt-1 text-[12px] text-faint">{{ t('profileform.blockLocalHint') }}</p>
+          </div>
         </fieldset>
 
         <fieldset class="m-0 p-0 border-0 flex flex-col gap-2">
