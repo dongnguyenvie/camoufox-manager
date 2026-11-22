@@ -101,6 +101,11 @@ anywhere and run `camoufox-manager.exe`. Camoufox is installed from the app, as 
 
 Data lives in `%APPDATA%\camoufox-manager\` (the database is `camoufox-manager.db`).
 
+## Release builds
+
+`scripts/release-macos.sh` (universal dmg + zip) and `scripts/release-windows.ps1` (x64 zip) produce
+checksummed artifacts in `release/<version>/`. See [scripts/README.md](scripts/README.md).
+
 ## Configuration
 
 Data lives in `~/Library/Application Support/camoufox-manager/` (the database is
