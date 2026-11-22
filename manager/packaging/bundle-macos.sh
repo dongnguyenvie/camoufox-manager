@@ -13,32 +13,58 @@ UV_SHA256_X86_64="8dcf05a8c809bb3c471d2b614788ba27a6e41298fc8c31ac84b5f4339fd468
 # workspace-wide version ([workspace.package] in Cargo.toml)
 VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
 
-cargo build --release -p camoufox-manager
+# CM_BINARY: prebuilt binary (e.g. a universal one from scripts/release-macos.sh); skips cargo build
+if [ -n "${CM_BINARY:-}" ]; then
+  BIN="$CM_BINARY"
+else
+  cargo build --release -p camoufox-manager
+  BIN=target/release/camoufox-manager
+fi
 [ -f packaging/AppIcon.icns ] || python3 packaging/make_icon.py
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp target/release/camoufox-manager "$APP/Contents/MacOS/Camoufox Manager"
+cp "$BIN" "$APP/Contents/MacOS/Camoufox Manager"
 cp packaging/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 # bundle uv: UV_BIN (local builds/tests, no download) or the pinned official release
+# CM_UV_ARCH=aarch64|x86_64|universal picks the uv build (default: this machine; universal = lipo of both)
+fetch_uv() { # $1 = aarch64|x86_64, $2 = output path
+  local arch=$1 sha tgz tmp
+  case "$arch" in
+    aarch64) sha="$UV_SHA256_AARCH64" ;;
+    x86_64) sha="$UV_SHA256_X86_64" ;;
+    *) echo "unsupported uv architecture: $arch" >&2; exit 1 ;;
+  esac
+  tgz="packaging/.cache/uv-$UV_VERSION-$arch-apple-darwin.tar.gz"
+  mkdir -p packaging/.cache
+  [ -f "$tgz" ] || curl -fsSL -o "$tgz" \
+    "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-$arch-apple-darwin.tar.gz"
+  echo "$sha  $tgz" | shasum -a 256 -c - >/dev/null || { echo "uv sha256 mismatch: $tgz" >&2; exit 1; }
+  tmp=$(mktemp -d)
+  tar -xzf "$tgz" -C "$tmp" --strip-components=1 "uv-$arch-apple-darwin/uv"
+  cp "$tmp/uv" "$2"
+  rm -rf "$tmp"
+}
 if [ -n "${UV_BIN:-}" ]; then
   cp "$UV_BIN" "$APP/Contents/MacOS/uv"
 else
-  case "$(uname -m)" in
-    arm64) UV_ARCH=aarch64; UV_SHA256="$UV_SHA256_AARCH64" ;;
-    x86_64) UV_ARCH=x86_64; UV_SHA256="$UV_SHA256_X86_64" ;;
-    *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
-  esac
-  UV_TGZ="packaging/.cache/uv-$UV_VERSION-$UV_ARCH-apple-darwin.tar.gz"
-  mkdir -p packaging/.cache
-  [ -f "$UV_TGZ" ] || curl -fsSL -o "$UV_TGZ" \
-    "https://github.com/astral-sh/uv/releases/download/$UV_VERSION/uv-$UV_ARCH-apple-darwin.tar.gz"
-  echo "$UV_SHA256  $UV_TGZ" | shasum -a 256 -c - >/dev/null || { echo "uv sha256 mismatch: $UV_TGZ" >&2; exit 1; }
-  UV_TMP=$(mktemp -d)
-  tar -xzf "$UV_TGZ" -C "$UV_TMP" --strip-components=1 "uv-$UV_ARCH-apple-darwin/uv"
-  cp "$UV_TMP/uv" "$APP/Contents/MacOS/uv"
-  rm -rf "$UV_TMP"
+  UV_ARCH="${CM_UV_ARCH:-}"
+  if [ -z "$UV_ARCH" ]; then
+    case "$(uname -m)" in
+      arm64) UV_ARCH=aarch64 ;;
+      x86_64) UV_ARCH=x86_64 ;;
+      *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+    esac
+  fi
+  if [ "$UV_ARCH" = universal ]; then
+    UV_A=$(mktemp); UV_X=$(mktemp)
+    fetch_uv aarch64 "$UV_A"; fetch_uv x86_64 "$UV_X"
+    lipo -create "$UV_A" "$UV_X" -output "$APP/Contents/MacOS/uv"
+    rm -f "$UV_A" "$UV_X"
+  else
+    fetch_uv "$UV_ARCH" "$APP/Contents/MacOS/uv"
+  fi
 fi
 chmod +x "$APP/Contents/MacOS/uv"
 # third-party licenses (uv is distributed under its MIT option)

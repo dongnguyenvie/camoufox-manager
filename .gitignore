@@ -20,3 +20,4 @@ manager/packaging/.cache/
 
 # planning docs (kept in .local, not in git)
 tasks/
+release/
