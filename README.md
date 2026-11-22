@@ -21,7 +21,7 @@ cookies and data. Everything runs on your machine, binds to `127.0.0.1` only, an
 ## Requirements
 
 - macOS 11 or later and a Rust toolchain (the app is built from source).
-- [uv](https://docs.astral.sh/uv/) and the Camoufox setup script (optional, see below).
+- The packaged app ships [uv](https://docs.astral.sh/uv/) (MIT, license in `Contents/Resources/licenses`). Running from source needs `brew install uv` for the Camoufox setup script (optional, see below).
 - For device sync only: the Tailscale app.
 
 ## Install Camoufox (optional)
@@ -36,6 +36,9 @@ manager/camoufox/setup.sh
 The script creates a dedicated venv with `uv`, installs the pinned `camoufox` package and downloads the
 browser (about 2.4 GB into the Camoufox cache). Set `CAMOUFOX_VENV=/path/to/venv` to put the venv
 elsewhere, and then point `CAMOUFOX_PYTHON` at its Python.
+
+In the packaged app, the in-app Camoufox Install / Update uses the bundled `uv` (`Contents/MacOS/uv`), so
+nothing needs to be preinstalled. `CAMOUFOX_UV=/path/to/uv` overrides it.
 
 ## Build and run
 
@@ -68,6 +71,7 @@ Data lives in `~/Library/Application Support/camoufox-manager/` (the database is
 | `CM_SYNC_CHUNK_SIZE` | built-in | Transfer chunk size in bytes. Tests and development only. |
 | `CM_TAILSCALE_BIN` | unset | Path to the `tailscale` binary; otherwise `PATH` and usual locations are searched. |
 | `CAMOUFOX_PYTHON` | `<data dir>/camoufox/venv/bin/python` | Python of the Camoufox venv. |
+| `CAMOUFOX_UV` | bundled, else `PATH` | Explicit path to `uv` used by the in-app Install / Update. |
 | `CAMOUFOX_HEADLESS` | off | `1` launches browsers without a window. |
 | `PROXY_FILE` | `<data dir>/proxies.txt` | Legacy proxy file, imported on first start. |
 | `CM_API_KEY` | unset | API key the CLI sends as `X-API-Key`. |

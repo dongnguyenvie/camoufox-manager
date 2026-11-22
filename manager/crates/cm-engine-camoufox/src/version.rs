@@ -58,13 +58,25 @@ pub(crate) fn summary(v: &EngineVersions) -> Option<String> {
     }
 }
 
-/// `uv` from PATH or the usual install folders (a GUI app has a short PATH).
-fn find_uv() -> Option<PathBuf> {
-    let home = std::env::var("HOME").map(PathBuf::from).unwrap_or_default();
-    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
+/// Candidate directories for `uv`, in lookup order: the folder of the running executable (the
+/// bundled `Contents/MacOS/uv` in the macOS app), then PATH, then the usual install folders.
+fn uv_dirs(exe_dir: Option<PathBuf>, path: Option<std::ffi::OsString>, home: &Path) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = exe_dir.into_iter().collect();
+    dirs.extend(path.map(|p| std::env::split_paths(&p).collect::<Vec<_>>()).unwrap_or_default());
     dirs.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from));
     dirs.extend([home.join(".local/bin"), home.join(".cargo/bin")]);
-    dirs.into_iter().map(|d| d.join("uv")).find(|p| p.is_file())
+    dirs
+}
+
+/// Locate `uv`: `CAMOUFOX_UV` (explicit path) first, then the copy next to the running executable
+/// (bundled in the packaged app), then PATH and the usual install folders (a GUI app has a short PATH).
+fn find_uv() -> Option<PathBuf> {
+    if let Some(p) = std::env::var_os("CAMOUFOX_UV").map(PathBuf::from).filter(|p| p.is_file()) {
+        return Some(p);
+    }
+    let home = std::env::var("HOME").map(PathBuf::from).unwrap_or_default();
+    let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf));
+    uv_dirs(exe_dir, std::env::var_os("PATH"), &home).into_iter().map(|d| d.join("uv")).find(|p| p.is_file())
 }
 
 /// Forward every line (split on `\n` and `\r`, so progress bars become lines) to `tx`.
@@ -126,7 +138,11 @@ pub(crate) async fn install(python: &Path, log: &(dyn Fn(String) + Send + Sync))
         _ => None,
     }
     .with_context(|| format!("cannot install: {} is not <venv>/bin/python (CAMOUFOX_PYTHON points elsewhere)", python.display()))?;
-    let Some(uv) = find_uv() else { bail!("uv is required: https://docs.astral.sh/uv/ (brew install uv)") };
+    let Some(uv) = find_uv() else {
+        bail!(
+            "uv not found: it is normally bundled next to the app executable; otherwise install it (https://docs.astral.sh/uv/, e.g. brew install uv) or set CAMOUFOX_UV to its path"
+        )
+    };
     let mut path = vec![uv.parent().map(Path::to_path_buf).unwrap_or_default()];
     path.extend(std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect::<Vec<_>>()).unwrap_or_default());
     let path_env = std::env::join_paths(path)?;
@@ -157,6 +173,16 @@ mod tests {
         let v = EngineVersions { package: Some("0.5.9".into()), browser: Some("158.0.1-beta.41".into()) };
         assert_eq!(summary(&v).unwrap(), "0.5.9 · browser 158.0.1-beta.41");
         assert_eq!(summary(&EngineVersions::default()), None);
+    }
+
+    #[test]
+    fn uv_lookup_order_prefers_exe_dir_then_path() {
+        let dirs = uv_dirs(Some("/app/MacOS".into()), Some("/a:/b".into()), Path::new("/home/u"));
+        let strs: Vec<_> = dirs.iter().map(|d| d.to_string_lossy().into_owned()).collect();
+        assert_eq!(&strs[..3], ["/app/MacOS", "/a", "/b"]);
+        assert_eq!(&strs[3..5], ["/opt/homebrew/bin", "/usr/local/bin"]);
+        assert_eq!(&strs[5..], ["/home/u/.local/bin", "/home/u/.cargo/bin"]);
+        assert_eq!(uv_dirs(None, None, Path::new("/h"))[0], PathBuf::from("/opt/homebrew/bin"));
     }
 
     #[tokio::test]

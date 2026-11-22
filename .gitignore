@@ -14,3 +14,6 @@ proxies.txt
 
 # subagent worktrees
 .claude/
+
+# bundled uv download cache
+manager/packaging/.cache/
