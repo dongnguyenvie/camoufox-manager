@@ -13,7 +13,9 @@
 //! `process` (spawn/stop/alive, phase 8), `lock` (per-profile lock + orphan cleanup, phase 8).
 
 mod closed;
+mod cookies;
 mod diag;
+mod extensions;
 mod helper;
 mod lock;
 mod machine;
@@ -109,49 +111,22 @@ impl Camoufox {
         r
     }
 
-    /// `helper cookies export|import` on the profile's user-data (python + stdlib sqlite only,
-    /// no browser start). Returns (exported cookies, count).
-    async fn cookie_helper(
-        &self,
-        p: &Profile,
-        action: &str,
-        cookies: Option<&[Cookie]>,
-        mode: CookieImportMode,
-    ) -> Result<(Vec<Cookie>, usize)> {
+    /// Export/import on the profile's user-data (sqlite only: no python, no browser start).
+    /// Returns (exported cookies, count).
+    async fn cookie_op(&self, p: &Profile, import: Option<(Vec<Cookie>, CookieImportMode)>) -> Result<(Vec<Cookie>, usize)> {
         check_id(&p.id)?;
         if self.procs.alive(&p.id).await == Some(true) {
             bail!(CmError::Conflict("profile is running".into()));
         }
-        if !self.python.is_file() {
-            bail!("python not found at {} — run {SETUP_SCRIPT}", self.python.display());
-        }
-        let dir = self.dir(&p.id);
-        fs::create_dir_all(&dir)?;
-        let file = dir.join(format!("cookies-{action}.json.tmp"));
-        match cookies {
-            Some(c) => fs::write(&file, serde_json::to_vec(c)?)?,
-            None => {
-                let _ = fs::remove_file(&file);
-            }
-        }
         let user_data = self.data_dir(&p.id);
-        let (ud, f) = (user_data.to_string_lossy(), file.to_string_lossy());
-        let mode = if mode == CookieImportMode::All { "all" } else { "domains" };
-        let r = helper::run(
-            &self.python,
-            &self.helper,
-            &["cookies", action, "--user-data", &ud, "--file", &f, "--mode", mode],
-            Duration::from_secs(60),
-        )
-        .await;
-        let exported = if action == "export" && r.is_ok() { fs::read(&file).ok() } else { None };
-        let _ = fs::remove_file(&file); // holds cookie values: never leave it behind
-        let count = r?["count"].as_u64().unwrap_or(0) as usize;
-        let list = match exported {
-            Some(b) => serde_json::from_slice(&b).context("helper cookies export wrote invalid JSON")?,
-            None => Vec::new(),
-        };
-        Ok((list, count))
+        tokio::task::spawn_blocking(move || match import {
+            Some((list, mode)) => cookies::import(&user_data, &list, mode).map(|n| (Vec::new(), n)),
+            None => cookies::export(&user_data).map(|l| {
+                let n = l.len();
+                (l, n)
+            }),
+        })
+        .await?
     }
 
     async fn ensure_installed(&self) -> Result<()> {
@@ -220,6 +195,11 @@ impl Engine for Camoufox {
         let launch_file = dir.join("launch.json");
         write_atomic(&launch_file, &serde_json::to_vec(&json!({ "id": p.id, "config": p.machine }))?)?;
 
+        // Firefox extensions assigned in the app: sideloaded into <user-data>/extensions before the
+        // browser opens (see `extensions`).
+        let (ud, xpis) = (user_data.clone(), opts.extensions.clone());
+        let (installed, _) = tokio::task::spawn_blocking(move || extensions::sync(&ud, &xpis)).await??;
+
         let mut cmd = Command::new(&self.python);
         cmd.arg(&self.helper).arg("launch").arg("--profile").arg(&launch_file).arg("--user-data").arg(&user_data);
         // Only ever the app's local relay 127.0.0.1:port — never upstream credentials.
@@ -239,8 +219,8 @@ impl Engine for Camoufox {
             cmd.arg("--ip").arg(ip);
         }
         machine::launch_args(opts, &mut cmd);
-        for xpi in &opts.extensions {
-            cmd.arg("--extension").arg(xpi);
+        if !installed.is_empty() {
+            cmd.arg("--extension-prefs");
         }
         if opts.headless.unwrap_or(self.headless) {
             cmd.arg("--headless");
@@ -287,12 +267,11 @@ impl Engine for Camoufox {
     }
 
     async fn export_cookies(&self, p: &Profile, _format: CookieFormat) -> Result<Vec<Cookie>> {
-        let out = self.cookie_helper(p, "export", None, CookieImportMode::Domains).await?;
-        Ok(out.0)
+        Ok(self.cookie_op(p, None).await?.0)
     }
 
     async fn import_cookies(&self, p: &Profile, cookies: &[Cookie], mode: CookieImportMode) -> Result<usize> {
-        Ok(self.cookie_helper(p, "import", Some(cookies), mode).await?.1)
+        Ok(self.cookie_op(p, Some((cookies.to_vec(), mode))).await?.1)
     }
 
     async fn delete_data(&self, id: &str) -> Result<()> {
@@ -316,7 +295,7 @@ mod tests {
     fn helper_written_and_not_ready_without_python() {
         let root = std::env::temp_dir().join(format!("cm-engine-{}", std::process::id()));
         let e = Camoufox::new(root.clone(), root.join("no-python"), true);
-        for f in ["__main__.py", "common.py", "generate.py", "launch.py", "cookies.py", "extensions.py"] {
+        for f in ["__main__.py", "common.py", "generate.py", "launch.py"] {
             assert!(root.join("helper").join(f).is_file(), "{f}");
         }
         let st = tokio::runtime::Runtime::new().unwrap().block_on(e.status());

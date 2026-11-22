@@ -17,8 +17,6 @@ pub(crate) const FILES: &[(&str, &str)] = &[
     ("common.py", include_str!("../python/helper/common.py")),
     ("generate.py", include_str!("../python/helper/generate.py")),
     ("launch.py", include_str!("../python/helper/launch.py")),
-    ("cookies.py", include_str!("../python/helper/cookies.py")),
-    ("extensions.py", include_str!("../python/helper/extensions.py")),
     ("warm.py", include_str!("../python/helper/warm.py")),
 ];
 
@@ -38,6 +36,10 @@ pub fn install(root: &Path) -> PathBuf {
     }
     // Single-file helper of older versions.
     let _ = fs::remove_file(root.join("helper.py"));
+    // Modules that moved into Rust (cookies, extensions).
+    for old in ["cookies.py", "extensions.py"] {
+        let _ = fs::remove_file(dir.join(old));
+    }
     dir
 }
 

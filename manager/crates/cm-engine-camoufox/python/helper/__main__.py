@@ -12,13 +12,9 @@ the camoufox venv's python:  python <data_dir>/camoufox/helper <command> ...
   launch --profile <launch.json> --user-data <dir> [--proxy URL]
          [--timezone TZ] [--geo=LAT,LON] [--ip IP] [--headless] [--locale L]
          [--webrtc replace|real|forward|none] [--screen WxH] [--window WxH] [--fonts JSON]
-         [--humanize] [--start-url URL] [--canvas unique|native|random] [--extension X.xpi]...   (launch.py)
+         [--humanize] [--start-url URL] [--canvas unique|native|random] [--extension-prefs]   (launch.py)
       Opens Camoufox with the persistent profile, prints {"ws": "ws://127.0.0.1:PORT/TOKEN"}
       (Playwright protocol: playwright.firefox.connect(ws)) and runs until stdin closes / "stop".
-  cookies export|import --user-data DIR --file FILE [--mode domains|all]   (cookies.py)
-      Cookie store of a CLOSED profile as JSON; prints {"ok": true, "count": N}.
-  extensions install --user-data DIR [XPI...]                 (extensions.py)
-      Sync <DIR>/extensions/ with the given .xpi files; prints {"ok": true, "installed": [...], "removed": [...]}.
   warm --ws WS --urls JSON --dwell SECONDS                    (warm.py, phase 10)
       Visits each URL on a RUNNING profile (connects over its ws endpoint), dwelling with light scrolling.
 
@@ -66,16 +62,7 @@ def main():
     l.add_argument("--humanize", action="store_true")
     l.add_argument("--start-url")
     l.add_argument("--canvas", choices=["unique", "native", "random"])
-    l.add_argument("--extension", action="append", help="path of an .xpi to install (repeatable)")
-    c = sub.add_parser("cookies")
-    c.add_argument("action", choices=["export", "import"])
-    c.add_argument("--user-data", required=True)
-    c.add_argument("--file", required=True)
-    c.add_argument("--mode", choices=["domains", "all"], default="domains")
-    e = sub.add_parser("extensions")
-    e.add_argument("action", choices=["install"])
-    e.add_argument("--user-data", required=True)
-    e.add_argument("xpi", nargs="*")
+    l.add_argument("--extension-prefs", action="store_true", help="set the prefs that let sideloaded unsigned add-ons load")
     w = sub.add_parser("warm")
     w.add_argument("--ws", required=True)
     w.add_argument("--urls", required=True, help="JSON array of URLs")
@@ -92,18 +79,10 @@ def main():
             from launch import cmd_launch
 
             asyncio.run(cmd_launch(args))
-        elif args.cmd == "cookies":
-            from cookies import cmd_cookies
-
-            cmd_cookies(args)
-        elif args.cmd == "warm":
+        else:
             from warm import cmd_warm
 
             asyncio.run(cmd_warm(args))
-        else:
-            from extensions import cmd_extensions
-
-            cmd_extensions(args)
     except Exception as e:
         emit({"error": f"{type(e).__name__}: {e}"})
         sys.exit(1)

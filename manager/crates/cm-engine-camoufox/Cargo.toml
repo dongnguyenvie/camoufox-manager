@@ -13,3 +13,5 @@ serde.workspace = true
 serde_json.workspace = true
 libc = "0.2"
 tokio.workspace = true
+rusqlite.workspace = true
+zip = { version = "2.6.1", default-features = false, features = ["deflate"] }
