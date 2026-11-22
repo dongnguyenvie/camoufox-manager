@@ -1,4 +1,6 @@
 //! Profile routes: overview, create/delete, start/stop, reveal data folder.
+//! CM-3.1 trash: `GET /api/profiles/trash`, `POST /api/profiles/{id}/restore`, `DELETE /api/profiles/{id}/purge`,
+//! `POST /api/profiles/trash/empty` (DELETE on a profile moves it to the trash).
 //! Phase 4: `GET/PUT /api/profiles/{id}` (edit settings), `POST /api/profiles/{id}/regenerate-machine`.
 
 use super::{ApiResult, Shared, ok};
@@ -6,7 +8,7 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::HeaderMap,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use cm_core::NewProfile;
 use cm_service::profiles::ProfileEdit;
@@ -57,6 +59,24 @@ async fn delete_profile(State(m): State<Shared>, Path(id): Path<String>) -> ApiR
     ok(json!({ "ok": true }))
 }
 
+async fn trash_list(State(m): State<Shared>) -> ApiResult {
+    ok(m.trashed_profiles().await?)
+}
+
+async fn restore_profile(State(m): State<Shared>, Path(id): Path<String>) -> ApiResult {
+    m.restore_profile(&id).await?;
+    ok(json!({ "ok": true }))
+}
+
+async fn purge_profile(State(m): State<Shared>, Path(id): Path<String>) -> ApiResult {
+    m.purge_profile(&id).await?;
+    ok(json!({ "ok": true }))
+}
+
+async fn empty_trash(State(m): State<Shared>) -> ApiResult {
+    ok(json!({ "purged": m.empty_trash().await? }))
+}
+
 async fn reveal(State(m): State<Shared>, Path(id): Path<String>) -> ApiResult {
     std::process::Command::new(super::opener()).arg(m.profile_dir(&id).await?).spawn()?;
     ok(json!({ "ok": true }))
@@ -66,9 +86,13 @@ pub fn routes() -> Router<Shared> {
     Router::new()
         .route("/api/overview", get(overview))
         .route("/api/profiles", post(create_profile))
+        .route("/api/profiles/trash", get(trash_list))
+        .route("/api/profiles/trash/empty", post(empty_trash))
         .route("/api/profiles/{id}", get(get_profile).put(update_profile).delete(delete_profile))
         .route("/api/profiles/{id}/regenerate-machine", post(regenerate_machine))
         .route("/api/profiles/{id}/start", post(start))
         .route("/api/profiles/{id}/stop", post(stop))
+        .route("/api/profiles/{id}/restore", post(restore_profile))
+        .route("/api/profiles/{id}/purge", delete(purge_profile))
         .route("/api/profiles/{id}/reveal", post(reveal))
 }

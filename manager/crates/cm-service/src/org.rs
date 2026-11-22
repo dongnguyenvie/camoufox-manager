@@ -271,6 +271,8 @@ mod tests {
         assert_eq!((r.ok, r.failed), (1, 1));
         let r = m.bulk(req("stop", &[&a.id, &b.id])).await.unwrap();
         assert_eq!(r.ok, 2);
+        // With the trash off (0 days) delete is immediate and the assignments go with the rows.
+        m.update_settings(crate::settings::SettingsPatch { trash_days: Some(0), ..Default::default() }).await.unwrap();
         let r = m.bulk(req("delete", &ids)).await.unwrap();
         assert_eq!((r.ok, r.failed), (2, 1));
         let ov = m.org_overview().await.unwrap();

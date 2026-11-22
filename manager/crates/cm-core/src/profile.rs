@@ -157,15 +157,32 @@ pub struct NewProfile {
     pub os: String,
 }
 
+/// A profile in the trash (CM-3.1) and when it was put there.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TrashedProfile {
+    pub profile: Profile,
+    /// ISO 8601 UTC.
+    pub deleted_at: String,
+}
+
 #[async_trait]
 pub trait ProfileRepo: Send + Sync {
-    /// All profiles, oldest first.
+    /// All profiles, oldest first. Trashed profiles (CM-3.1) are hidden here and in `get`.
     async fn list(&self) -> Result<Vec<Profile>>;
     async fn get(&self, id: &str) -> Result<Option<Profile>>;
     async fn insert(&self, p: &Profile) -> Result<()>;
     /// Replace the whole record (by id). `CmError::NotFound` if missing.
     async fn update(&self, p: &Profile) -> Result<()>;
+    /// Remove the record for good (trashed or not).
     async fn delete(&self, id: &str) -> Result<()>;
+    /// Move to the trash at `at` (ISO 8601). `NotFound` if missing or already trashed.
+    async fn trash(&self, id: &str, at: &str) -> Result<()>;
+    /// Trashed profiles, most recently trashed first.
+    async fn list_trashed(&self) -> Result<Vec<TrashedProfile>>;
+    /// Take a profile out of the trash. `NotFound` if it is not trashed.
+    async fn restore(&self, id: &str) -> Result<()>;
+    /// Remove a trashed record for good. `NotFound` if it is not trashed.
+    async fn purge(&self, id: &str) -> Result<()>;
     /// Assign (`Some`) or clear (`None`) the profile's proxy.
     async fn set_proxy(&self, id: &str, proxy: Option<ProxyId>) -> Result<()>;
     /// Record a start at `at` (ISO 8601).

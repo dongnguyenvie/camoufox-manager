@@ -321,8 +321,14 @@ impl Manager {
                 Ok(_) => {}
                 Err(e) => eprintln!("scheduler: {e:#}"),
             }
+            // CM-3.1: purge expired trash at startup, then hourly.
+            let mut last_purge: Option<std::time::Instant> = None;
             loop {
                 let _ = self.scheduler_tick().await.map_err(|e| eprintln!("scheduler: {e:#}"));
+                if last_purge.is_none_or(|t| t.elapsed() >= Duration::from_secs(3600)) {
+                    last_purge = Some(std::time::Instant::now());
+                    let _ = self.purge_expired_trash().await.map_err(|e| eprintln!("trash: {e:#}"));
+                }
                 tokio::time::sleep(Duration::from_secs(TICK_SECS)).await;
             }
         })

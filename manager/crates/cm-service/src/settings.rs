@@ -45,6 +45,8 @@ pub struct SettingsView {
     pub headless: bool,
     /// Non-UI clients must send a valid `X-API-Key`.
     pub require_api_key: bool,
+    /// Days deleted profiles stay in the trash (0 = delete right away).
+    pub trash_days: u32,
     pub engine: EngineInfo,
 }
 
@@ -55,6 +57,7 @@ pub struct SettingsPatch {
     pub language: Option<String>,
     pub headless: Option<bool>,
     pub require_api_key: Option<bool>,
+    pub trash_days: Option<u32>,
 }
 
 /// A freshly created key: the only time the secret is visible.
@@ -171,6 +174,7 @@ impl Manager {
             ui_port: None,
             headless: self.headless_default().await.unwrap_or(false),
             require_api_key: self.require_api_key().await,
+            trash_days: self.trash_days().await,
             engine: EngineInfo {
                 name: self.d.engine.name(),
                 ready: status.ready,
@@ -195,6 +199,12 @@ impl Manager {
         }
         if let Some(r) = patch.require_api_key {
             self.d.settings.set(REQUIRE_API_KEY, &json!(r)).await?;
+        }
+        if let Some(d) = patch.trash_days {
+            if d > crate::profiles::MAX_TRASH_DAYS {
+                bail!(CmError::Invalid(format!("trash retention must be 0-{} days", crate::profiles::MAX_TRASH_DAYS)));
+            }
+            self.d.settings.set(cm_core::settings::TRASH_DAYS, &json!(d)).await?;
         }
         Ok(self.settings().await)
     }

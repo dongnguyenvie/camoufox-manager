@@ -147,6 +147,52 @@ async fn create_validates_and_delete_works() {
 }
 
 #[tokio::test]
+async fn delete_goes_to_trash_and_restores() {
+    let (m, _) = manager(true, free_port().await);
+    let p = m.create_profile(NewProfile { name: "a".into(), os: "lin".into() }).await.unwrap();
+    assert_eq!(m.trash_days().await, 7);
+    m.delete_profile(&p.id).await.unwrap();
+    assert!(m.overview().await.profiles.is_empty());
+    assert!(m.start(&p.id).await.is_err(), "a trashed profile cannot start");
+    let t = m.trashed_profiles().await.unwrap();
+    assert_eq!((t.days, t.profiles.len(), t.profiles[0].id.as_str()), (7, 1, p.id.as_str()));
+    m.restore_profile(&p.id).await.unwrap();
+    assert_eq!(m.overview().await.profiles.len(), 1);
+    assert!(m.restore_profile(&p.id).await.is_err());
+    // Delete again, then purge for good.
+    m.delete_profile(&p.id).await.unwrap();
+    m.purge_profile(&p.id).await.unwrap();
+    assert!(m.trashed_profiles().await.unwrap().profiles.is_empty());
+    assert!(m.purge_profile(&p.id).await.is_err());
+}
+
+#[tokio::test]
+async fn zero_retention_deletes_at_once() {
+    let (m, _) = manager(true, free_port().await);
+    m.update_settings(SettingsPatch { trash_days: Some(0), ..Default::default() }).await.unwrap();
+    let p = m.create_profile(NewProfile { name: "a".into(), os: "lin".into() }).await.unwrap();
+    m.delete_profile(&p.id).await.unwrap();
+    assert!(m.trashed_profiles().await.unwrap().profiles.is_empty());
+    assert!(m.update_settings(SettingsPatch { trash_days: Some(9999), ..Default::default() }).await.is_err());
+}
+
+#[tokio::test]
+async fn expired_trash_is_purged_and_empty_trash_clears_the_rest() {
+    let (m, _) = manager(true, free_port().await);
+    let old = m.create_profile(NewProfile { name: "old".into(), os: "lin".into() }).await.unwrap();
+    let new = m.create_profile(NewProfile { name: "new".into(), os: "lin".into() }).await.unwrap();
+    m.delete_profile(&new.id).await.unwrap();
+    // Trashed 30 days ago (retention is 7).
+    let ago = cm_core::clock::iso(cm_core::Clock::now(&SystemClock) - 30 * 86_400);
+    m.d.profiles.trash(&old.id, &ago).await.unwrap();
+    assert_eq!(m.purge_expired_trash().await.unwrap(), 1);
+    let t = m.trashed_profiles().await.unwrap();
+    assert_eq!((t.profiles.len(), t.profiles[0].id.as_str()), (1, new.id.as_str()));
+    assert_eq!(m.empty_trash().await.unwrap(), 1);
+    assert!(m.trashed_profiles().await.unwrap().profiles.is_empty());
+}
+
+#[tokio::test]
 async fn language_setting() {
     let (m, _) = manager(true, free_port().await);
     assert_eq!(m.language().await, "en");

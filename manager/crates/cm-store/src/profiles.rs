@@ -3,7 +3,7 @@
 use crate::Db;
 use anyhow::Result;
 use async_trait::async_trait;
-use cm_core::{CmError, Os, Profile, ProfileRepo, ProxyId};
+use cm_core::{CmError, Os, Profile, ProfileRepo, ProxyId, TrashedProfile};
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 pub struct SqliteProfiles {
@@ -64,14 +64,16 @@ fn not_found(id: &str) -> anyhow::Error {
 impl ProfileRepo for SqliteProfiles {
     async fn list(&self) -> Result<Vec<Profile>> {
         self.db.with(|c| {
-            let mut st = c.prepare(&format!("SELECT {COLS} FROM profiles ORDER BY created_at, name"))?;
+            let mut st = c.prepare(&format!("SELECT {COLS} FROM profiles WHERE deleted_at IS NULL ORDER BY created_at, name"))?;
             let rows = st.query_map([], from_row)?.collect::<rusqlite::Result<Vec<_>>>()?;
             Ok(rows)
         })
     }
 
     async fn get(&self, id: &str) -> Result<Option<Profile>> {
-        self.db.with(|c| Ok(c.query_row(&format!("SELECT {COLS} FROM profiles WHERE id = ?1"), [id], from_row).optional()?))
+        self.db.with(|c| {
+            Ok(c.query_row(&format!("SELECT {COLS} FROM profiles WHERE id = ?1 AND deleted_at IS NULL"), [id], from_row).optional()?)
+        })
     }
 
     async fn insert(&self, p: &Profile) -> Result<()> {
@@ -102,6 +104,38 @@ impl ProfileRepo for SqliteProfiles {
     async fn delete(&self, id: &str) -> Result<()> {
         self.db.with(|c| {
             let n = c.execute("DELETE FROM profiles WHERE id = ?1", [id])?;
+            if n == 0 { Err(not_found(id)) } else { Ok(()) }
+        })
+    }
+
+    async fn trash(&self, id: &str, at: &str) -> Result<()> {
+        self.db.with(|c| {
+            let n = c.execute("UPDATE profiles SET deleted_at = ?2 WHERE id = ?1 AND deleted_at IS NULL", params![id, at])?;
+            if n == 0 { Err(not_found(id)) } else { Ok(()) }
+        })
+    }
+
+    async fn list_trashed(&self) -> Result<Vec<TrashedProfile>> {
+        self.db.with(|c| {
+            let mut st =
+                c.prepare(&format!("SELECT {COLS}, deleted_at FROM profiles WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC, id"))?;
+            let rows = st
+                .query_map([], |r| Ok(TrashedProfile { profile: from_row(r)?, deleted_at: r.get(10)? }))?
+                .collect::<rusqlite::Result<Vec<_>>>()?;
+            Ok(rows)
+        })
+    }
+
+    async fn restore(&self, id: &str) -> Result<()> {
+        self.db.with(|c| {
+            let n = c.execute("UPDATE profiles SET deleted_at = NULL WHERE id = ?1 AND deleted_at IS NOT NULL", [id])?;
+            if n == 0 { Err(not_found(id)) } else { Ok(()) }
+        })
+    }
+
+    async fn purge(&self, id: &str) -> Result<()> {
+        self.db.with(|c| {
+            let n = c.execute("DELETE FROM profiles WHERE id = ?1 AND deleted_at IS NOT NULL", [id])?;
             if n == 0 { Err(not_found(id)) } else { Ok(()) }
         })
     }
@@ -161,6 +195,26 @@ mod tests {
         repo.db.with(|c| Ok(c.execute("UPDATE profiles SET settings = '{\"locale\":\"fr\"}' WHERE id = 'bb22'", [])?)).unwrap();
         let s = repo.get("bb22").await.unwrap().unwrap().settings;
         assert_eq!((s.locale.as_deref(), s.canvas, s.fonts.len()), (Some("fr"), CanvasMode::Stable, 0));
+    }
+
+    #[tokio::test]
+    async fn trash_hides_restore_and_purge() {
+        let repo = SqliteProfiles::new(Db::memory().unwrap());
+        repo.insert(&sample("aa11")).await.unwrap();
+        repo.insert(&sample("bb22")).await.unwrap();
+        repo.trash("aa11", "2024-03-01T00:00:00Z").await.unwrap();
+        assert!(repo.trash("aa11", "2024-03-02T00:00:00Z").await.is_err(), "already trashed");
+        assert!(repo.get("aa11").await.unwrap().is_none());
+        assert_eq!(repo.list().await.unwrap().len(), 1);
+        let t = repo.list_trashed().await.unwrap();
+        assert_eq!((t.len(), t[0].profile.id.as_str(), t[0].deleted_at.as_str()), (1, "aa11", "2024-03-01T00:00:00Z"));
+        assert!(repo.purge("bb22").await.is_err(), "purge only touches trashed rows");
+        repo.restore("aa11").await.unwrap();
+        assert!(repo.restore("aa11").await.is_err());
+        assert_eq!(repo.list().await.unwrap().len(), 2);
+        repo.trash("aa11", "2024-03-01T00:00:00Z").await.unwrap();
+        repo.purge("aa11").await.unwrap();
+        assert!(repo.list_trashed().await.unwrap().is_empty());
     }
 
     #[tokio::test]

@@ -16,6 +16,9 @@ pub const API_KEY: &str = "api.key";
 /// `true`: requests that do not come from the embedded UI must carry a valid `X-API-Key` (phase 12).
 pub const REQUIRE_API_KEY: &str = "api.require_key";
 
+/// Days a deleted profile stays in the trash (CM-3.1); `0` = delete immediately. Default 7.
+pub const TRASH_DAYS: &str = "profiles.trash_days";
+
 pub const LANGUAGES: [&str; 2] = ["en", "vi"];
 
 #[async_trait]

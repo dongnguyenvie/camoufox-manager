@@ -51,6 +51,28 @@ pub struct ProfileView {
     pub path: PathInfo,
 }
 
+/// Default and upper bound of the trash retention (days).
+pub const DEFAULT_TRASH_DAYS: u32 = 7;
+pub const MAX_TRASH_DAYS: u32 = 365;
+
+/// One profile in the trash (CM-3.1).
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashedView {
+    pub id: String,
+    pub name: String,
+    pub os: Os,
+    pub deleted_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashView {
+    /// Retention in days; trashed profiles older than this are purged automatically.
+    pub days: u32,
+    pub profiles: Vec<TrashedView>,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Overview {
@@ -278,14 +300,80 @@ impl Manager {
         self.overview().await.profiles.into_iter().find(|v| v.id == id).context("created profile vanished")
     }
 
-    /// Delete: stop if running, remove the record, then the data on disk.
+    /// Delete: stop if running (this also releases the lease). With a retention of 0 days the
+    /// record and the data on disk go right away; otherwise the profile moves to the trash (CM-3.1)
+    /// and its data stays until it is restored or purged.
     pub async fn delete_profile(&self, id: &str) -> Result<()> {
         self.profile(id).await?;
         if self.running.lock().await.contains_key(id) {
             self.stop(id).await?;
         }
-        self.d.profiles.delete(id).await?;
-        self.d.engine.delete_data(id).await
+        let _ = self.lease_release(id, None).await;
+        if self.trash_days().await == 0 {
+            self.d.profiles.delete(id).await?;
+            return self.d.engine.delete_data(id).await;
+        }
+        self.d.profiles.trash(id, &self.d.clock.now_iso()).await
+    }
+
+    /// Retention of trashed profiles in days (`0` = no trash). Default 7.
+    pub async fn trash_days(&self) -> u32 {
+        let v = self.d.settings.get(cm_core::settings::TRASH_DAYS).await.ok().flatten();
+        v.and_then(|v| v.as_u64()).map_or(DEFAULT_TRASH_DAYS, |n| n.min(MAX_TRASH_DAYS as u64) as u32)
+    }
+
+    /// The trash, most recently deleted first.
+    pub async fn trashed_profiles(&self) -> Result<TrashView> {
+        let profiles = self
+            .d
+            .profiles
+            .list_trashed()
+            .await?
+            .into_iter()
+            .map(|t| TrashedView { id: t.profile.id, name: t.profile.name, os: t.profile.os, deleted_at: t.deleted_at })
+            .collect();
+        Ok(TrashView { days: self.trash_days().await, profiles })
+    }
+
+    /// Take a profile out of the trash; it shows up in the list again, stopped.
+    pub async fn restore_profile(&self, id: &str) -> Result<()> {
+        self.d.profiles.restore(id).await
+    }
+
+    /// Delete a trashed profile for good: its data on disk first, then the record (a failure keeps
+    /// the entry in the trash so it can be retried).
+    pub async fn purge_profile(&self, id: &str) -> Result<()> {
+        if !self.d.profiles.list_trashed().await?.iter().any(|t| t.profile.id == id) {
+            bail!(CmError::NotFound(format!("trashed profile {id}")));
+        }
+        self.d.engine.delete_data(id).await?;
+        self.d.profiles.purge(id).await
+    }
+
+    /// Purge everything in the trash; returns how many profiles were removed.
+    pub async fn empty_trash(&self) -> Result<usize> {
+        let ids: Vec<String> = self.d.profiles.list_trashed().await?.into_iter().map(|t| t.profile.id).collect();
+        self.purge_all(ids).await
+    }
+
+    /// Purge profiles trashed longer ago than the retention. Runs at startup and hourly.
+    pub async fn purge_expired_trash(&self) -> Result<usize> {
+        let cutoff = cm_core::clock::iso(self.d.clock.now().saturating_sub(u64::from(self.trash_days().await) * 86_400));
+        // ISO 8601 UTC strings of the same shape sort like the times they stand for.
+        let ids: Vec<String> =
+            self.d.profiles.list_trashed().await?.into_iter().filter(|t| t.deleted_at <= cutoff).map(|t| t.profile.id).collect();
+        self.purge_all(ids).await
+    }
+
+    async fn purge_all(&self, ids: Vec<String>) -> Result<usize> {
+        let mut n = 0;
+        for id in ids {
+            match self.purge_profile(&id).await {
+                Ok(()) => n += 1,
+                Err(e) => eprintln!("trash: cannot purge {id}: {e:#}"),
+            }
+        }
+        Ok(n)
     }
 
     /// Data directory of the profile; error if it does not exist yet.
