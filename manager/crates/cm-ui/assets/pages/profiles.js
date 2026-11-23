@@ -50,6 +50,9 @@ I18N.add({
     'profiles.namePlaceholder': 'e.g. Shop 01',
     'profiles.os': 'Fingerprint OS',
     'profiles.fpOnce': 'The fingerprint is generated once and stays the same for this profile.',
+    'profiles.createProxy': 'Proxy',
+    'profiles.createProxyHint': 'Add proxies on the Proxy page. You can change it later in Edit.',
+    'profiles.createEdit': 'Create and open settings',
     'profiles.creating': 'Creating…',
     'profiles.created': 'Created profile {name}',
     'profiles.deleteTitle': 'Delete profile “{name}”?',
@@ -152,6 +155,9 @@ I18N.add({
     'profiles.namePlaceholder': 'Ví dụ: Shop 01',
     'profiles.os': 'Hệ điều hành của fingerprint',
     'profiles.fpOnce': 'Fingerprint được sinh một lần và giữ nguyên cho profile này.',
+    'profiles.createProxy': 'Proxy',
+    'profiles.createProxyHint': 'Thêm proxy ở trang Proxy. Có thể đổi sau trong Sửa.',
+    'profiles.createEdit': 'Tạo và mở cài đặt',
     'profiles.creating': 'Đang tạo…',
     'profiles.created': 'Đã tạo profile {name}',
     'profiles.deleteTitle': 'Xoá profile “{name}”?',
@@ -419,7 +425,7 @@ CM.pages.profiles = {
     }
     const reveal = p => api(`/api/profiles/${p.id}/reveal`, { method: 'POST' }).catch(err => toast(err.message, true));
 
-    const dlg = reactive({ open: false, name: '', os: 'win', busy: false });
+    const dlg = reactive({ open: false, name: '', os: 'win', proxyId: '', busy: false });
     const del = reactive({ p: null, busy: false });
     // CM-3.1 trash: list + retention, dialog, confirm (kind 'one' with p, or 'all')
     const trash = reactive({ open: false, days: 7, items: [], busy: false, confirm: null });
@@ -456,16 +462,25 @@ CM.pages.profiles = {
     const cookies = reactive({ id: null }); // cookies dialog (components/cookies.js)
     const cookiesFor = computed(() => (cookies.id && o.value?.profiles.find(p => p.id === cookies.id)) || null);
     const nameInput = ref(null);
-    const openCreate = () => { dlg.open = true; dlg.name = ''; dlg.os = 'win'; nextTick(() => nameInput.value?.focus()); };
-    async function create() {
+    const openCreate = () => { dlg.open = true; dlg.name = ''; dlg.os = 'win'; dlg.proxyId = ''; nextTick(() => nameInput.value?.focus()); };
+    // `thenEdit`: open the full settings form (components/profile-form.js) on the new profile.
+    async function create(thenEdit) {
       if (!dlg.name.trim() || dlg.busy) return;
       dlg.busy = true;
+      let p = null;
       try {
-        const p = await api('/api/profiles', { method: 'POST', body: JSON.stringify({ name: dlg.name.trim(), os: dlg.os }) });
+        p = await api('/api/profiles', { method: 'POST', body: JSON.stringify({ name: dlg.name.trim(), os: dlg.os }) });
+        if (dlg.proxyId !== '') {
+          const proxyId = Number(dlg.proxyId);
+          await api(`/api/profiles/${p.id}/assign`, { method: 'POST', body: JSON.stringify({ proxyId }) });
+          api(`/api/proxies/${proxyId}/check`, { method: 'POST' }).then(() => load()).catch(err => toast(t('proxies.failed', { msg: err.message }), true));
+        }
         toast(t('profiles.created', { name: p.name }));
         dlg.open = false;
       } catch (e) { toast(e.message, true); }
-      dlg.busy = false; load();
+      dlg.busy = false;
+      await load();
+      if (p && thenEdit === true) edit.id = p.id;
     }
     async function remove() {
       const p = del.p; if (!p) return;
@@ -649,9 +664,16 @@ CM.pages.profiles = {
         <cm-field :label="t('profiles.os')" :hint="t('profiles.fpOnce')">
           <select class="input" v-model="dlg.os"><option v-for="x in OSES" :key="x.k" :value="x.k">{{ x.t }}</option></select>
         </cm-field>
+        <cm-field :label="t('profiles.createProxy')" :hint="t('profiles.createProxyHint')">
+          <select class="input" v-model="dlg.proxyId">
+            <option value="">{{ noProxy() }}</option>
+            <option v-for="x in proxies" :key="x.id" :value="String(x.id)">#{{ x.id }} {{ x.label }}{{ x.geo ? ' · ' + x.geo.countryCode : '' }}</option>
+          </select>
+        </cm-field>
       </form>
       <template #footer>
         <button type="button" class="btn" :disabled="dlg.busy" @click="dlg.open = false">{{ t('common.cancel') }}</button>
+        <button type="button" class="btn" :disabled="dlg.busy || !dlg.name.trim()" @click="create(true)">{{ t('profiles.createEdit') }}</button>
         <button type="submit" form="create-profile" class="btn btn-start" :disabled="dlg.busy || !dlg.name.trim()">
           <template v-if="dlg.busy"><span class="spin"></span> {{ t('profiles.creating') }}</template><template v-else>{{ t('common.create') }}</template>
         </button>
