@@ -2,7 +2,7 @@
    <cm-profile-form :open="b" :profile="view" @close="b = false" @saved="reload"/>
    `profile` is a row of /api/overview (kept live by the page's polling; the form copies it when it
    opens, so polling never overwrites what you are typing).
-   Editable: name, notes, OS, start URL, screen, window size, locale/timezone override, WebRTC
+   Editable: name, notes, OS, proxy (via /assign), start URL, screen, window size, locale/timezone override, WebRTC
    mode, extra fonts, humanize, canvas mode. The pinned machine is shown read-only; changing the OS
    asks "keep machine" vs "new machine", and "Regenerate machine" is always explicit. */
 
@@ -13,7 +13,10 @@ I18N.add({
     'profileform.section.general': 'General',
     'profileform.section.display': 'Screen and window',
     'profileform.section.region': 'Region',
-    'profileform.section.network': 'WebRTC',
+    'profileform.section.network': 'Proxy and WebRTC',
+    'profileform.proxy': 'Proxy',
+    'profileform.proxyHint': 'From the Proxy library. Applies at the next Start; timezone, locale and geo follow it.',
+    'profileform.proxyStopFirst': 'Stop the profile before changing its proxy.',
     'profileform.section.fingerprint': 'Fingerprint',
     'profileform.section.data': 'Data',
     'profileform.dataHint': 'What this profile keeps between runs. Turning one off stops it being saved and clears it when the browser closes. Cookies and logins are never cleared.',
@@ -102,7 +105,10 @@ I18N.add({
     'profileform.section.general': 'Chung',
     'profileform.section.display': 'Màn hình và cửa sổ',
     'profileform.section.region': 'Vùng',
-    'profileform.section.network': 'WebRTC',
+    'profileform.section.network': 'Proxy và WebRTC',
+    'profileform.proxy': 'Proxy',
+    'profileform.proxyHint': 'Lấy từ thư viện Proxy. Áp dụng ở lần Start sau; múi giờ, ngôn ngữ và vị trí theo proxy.',
+    'profileform.proxyStopFirst': 'Stop profile trước khi đổi proxy.',
     'profileform.section.fingerprint': 'Fingerprint',
     'profileform.section.data': 'Dữ liệu',
     'profileform.dataHint': 'Những gì profile này giữ lại giữa các lần mở. Tắt một mục thì không lưu và sẽ xoá khi đóng browser. Cookie và đăng nhập không bao giờ bị xoá.',
@@ -199,7 +205,7 @@ CM.components.CmProfileForm = {
   emits: ['close', 'saved'],
   setup(props, { emit }) {
     const { reactive, ref, computed, watch } = Vue;
-    const f = reactive({ name: '', notes: '', os: 'win', startUrl: '', screen: '', window: '', locale: '', timezone: '', webrtc: 'replace', fonts: '', humanize: false, blockLocal: true, canvas: 'stable', data: { passwords: true, history: true, cache: true, siteStorage: true }, prefs: [], bookmarks: [] });
+    const f = reactive({ name: '', notes: '', os: 'win', startUrl: '', screen: '', window: '', locale: '', timezone: '', webrtc: 'replace', fonts: '', humanize: false, blockLocal: true, canvas: 'stable', data: { passwords: true, history: true, cache: true, siteStorage: true }, prefs: [], bookmarks: [], proxyId: '' });
     const view = ref(null);          // snapshot shown in the machine panel (replaced after a regenerate)
     const busy = ref(false), error = ref(''), osPrompt = ref(false);
     const regen = reactive({ open: false, os: 'win', busy: false });
@@ -208,7 +214,7 @@ CM.components.CmProfileForm = {
       view.value = p;
       const s = p.settings || {};
       Object.assign(f, {
-        name: p.name, notes: p.notes || '', os: p.os, startUrl: s.startUrl || '', screen: s.screen || '', window: s.window || '',
+        name: p.name, notes: p.notes || '', os: p.os, proxyId: p.assigned ? String(p.assigned.id) : '', startUrl: s.startUrl || '', screen: s.screen || '', window: s.window || '',
         locale: s.locale || '', timezone: s.timezone || '', webrtc: s.webrtc || 'replace', fonts: (s.fonts || []).join('\n'),
         humanize: !!s.humanize, blockLocal: s.blockLocalNetwork !== false, canvas: s.canvas || 'stable',
         data: { passwords: true, history: true, cache: true, siteStorage: true, ...(s.data || {}) },
@@ -221,11 +227,23 @@ CM.components.CmProfileForm = {
     // The watched value is a primitive (id while open), so a poll that swaps the profile object
     // for a fresh copy of the same profile does not retrigger it.
     watch(() => (props.open && props.profile ? props.profile.id : null), id => {
-      if (id) seed(props.profile);
+      if (id) { seed(props.profile); loadProxies(); }
       osPrompt.value = false; regen.open = false;
     }, { immediate: true });
 
     const running = computed(() => !!props.profile?.running);
+    const proxies = ref([]);
+    async function loadProxies() {
+      try { proxies.value = (await api('/api/proxies')).proxies; } catch (e) { error.value = e.message; }
+    }
+    // Proxy is a separate endpoint (assign); only called when the choice changed.
+    async function saveProxy() {
+      const before = props.profile.assigned ? String(props.profile.assigned.id) : '';
+      if (f.proxyId === before) return;
+      const proxyId = f.proxyId === '' ? null : Number(f.proxyId);
+      await api(`/api/profiles/${props.profile.id}/assign`, { method: 'POST', body: JSON.stringify({ proxyId }) });
+      if (proxyId !== null) api(`/api/proxies/${proxyId}/check`, { method: 'POST' }).then(() => emit('saved')).catch(e => toast(t('proxies.failed', { msg: e.message }), true));
+    }
     const fp = computed(() => view.value?.fp || {});
     const proxyTz = computed(() => props.profile?.assigned?.geo?.timezone);
     const proxyLocale = computed(() => props.profile?.assigned?.geo?.countryCode);
@@ -311,6 +329,7 @@ CM.components.CmProfileForm = {
       osPrompt.value = false; busy.value = true; error.value = '';
       try {
         await api(`/api/profiles/${props.profile.id}`, { method: 'PUT', body: JSON.stringify(body(osAction)) });
+        await saveProxy();
         toast(t('profileform.saved'));
         emit('saved'); emit('close');
       } catch (e) { error.value = e.message; }
@@ -328,7 +347,7 @@ CM.components.CmProfileForm = {
       regen.busy = false;
     }
 
-    return { f, OSES, WEBRTC, COMMON_LOCALES, tzList, busy, error, osPrompt, regen, running, fp, view, addPref, bmFile, bmBusy, addBookmark, addDefaultBookmarks, importBookmarks, machineRows, tzPlaceholder, localePlaceholder, osFrom, osTo, save, openRegen, regenerate };
+    return { f, proxies, OSES, WEBRTC, COMMON_LOCALES, tzList, busy, error, osPrompt, regen, running, fp, view, addPref, bmFile, bmBusy, addBookmark, addDefaultBookmarks, importBookmarks, machineRows, tzPlaceholder, localePlaceholder, osFrom, osTo, save, openRegen, regenerate };
   },
   template: `<div>
     <cm-dialog :open="open && !regen.open && !osPrompt" :title="t('profileform.title')" :busy="busy" :width="680" @close="$emit('close')">
@@ -343,6 +362,19 @@ CM.components.CmProfileForm = {
           <cm-field class="col-span-full" :label="t('profileform.notes')"><textarea class="input" rows="2" v-model="f.notes" maxlength="2000"></textarea></cm-field>
           <cm-field class="col-span-full" :label="t('profileform.startUrl')" :hint="t('profileform.startUrlHint')">
             <input class="input" v-model="f.startUrl" placeholder="https://" autocomplete="off" spellcheck="false">
+          </cm-field>
+        </fieldset>
+
+        <fieldset class="m-0 p-0 border-0 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+          <legend class="col-span-full text-[11px] uppercase tracking-wide text-faint font-semibold mb-1 p-0">{{ t('profileform.section.network') }}</legend>
+          <cm-field class="col-span-full" :label="t('profileform.proxy')" :hint="running ? t('profileform.proxyStopFirst') : t('profileform.proxyHint')">
+            <select class="input" v-model="f.proxyId" :disabled="running">
+              <option value="">{{ t('proxies.none') }}</option>
+              <option v-for="x in proxies" :key="x.id" :value="String(x.id)">#{{ x.id }} {{ x.name && x.name !== x.label ? x.name + ' · ' : '' }}{{ x.label }}{{ x.geo ? ' · ' + x.geo.countryCode : '' }}</option>
+            </select>
+          </cm-field>
+          <cm-field class="col-span-full" :label="t('profileform.webrtc')">
+            <select class="input" v-model="f.webrtc"><option v-for="m in WEBRTC" :key="m" :value="m">{{ t('profileform.webrtc.' + m) }}</option></select>
           </cm-field>
         </fieldset>
 
@@ -366,13 +398,6 @@ CM.components.CmProfileForm = {
           </cm-field>
           <datalist id="pf-locales"><option v-for="l in COMMON_LOCALES" :key="l" :value="l"></option></datalist>
           <datalist id="pf-timezones"><option v-for="z in tzList" :key="z" :value="z"></option></datalist>
-        </fieldset>
-
-        <fieldset class="m-0 p-0 border-0 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-          <legend class="col-span-full text-[11px] uppercase tracking-wide text-faint font-semibold mb-1 p-0">{{ t('profileform.section.network') }}</legend>
-          <cm-field class="col-span-full" :label="t('profileform.webrtc')">
-            <select class="input" v-model="f.webrtc"><option v-for="m in WEBRTC" :key="m" :value="m">{{ t('profileform.webrtc.' + m) }}</option></select>
-          </cm-field>
         </fieldset>
 
         <fieldset class="m-0 p-0 border-0 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
