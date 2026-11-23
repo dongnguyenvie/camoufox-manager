@@ -27,6 +27,10 @@ I18N.add({
     'proxies.edit': 'Edit',
     'proxies.editTitle': 'Edit proxy',
     'proxies.addTitle': 'Add proxy',
+    'proxies.newOption': '+ New proxy…',
+    'proxies.newLine': 'New proxy',
+    'proxies.newLineHint': 'host:port, host:port:user:pass or scheme://user:pass@host:port. It is saved to the Proxy library.',
+    'proxies.newDuplicate': 'This proxy is already in the library; choose it from the list.',
     'proxies.import': 'Import list',
     'proxies.importTitle': 'Import a list',
     'proxies.importHint': 'One proxy per line (up to 100): host:port, scheme://user:pass@host:port, socks5://[::1]:1080 or host:port:user:pass. Percent-encode special characters in credentials. The whole list is checked before anything is saved.',
@@ -113,6 +117,10 @@ I18N.add({
     'proxies.edit': 'Sửa',
     'proxies.editTitle': 'Sửa proxy',
     'proxies.addTitle': 'Thêm proxy',
+    'proxies.newOption': '+ Proxy mới…',
+    'proxies.newLine': 'Proxy mới',
+    'proxies.newLineHint': 'host:port, host:port:user:pass hoặc scheme://user:pass@host:port. Proxy được lưu vào thư viện Proxy.',
+    'proxies.newDuplicate': 'Proxy này đã có trong thư viện, hãy chọn nó trong danh sách.',
     'proxies.import': 'Nhập danh sách',
     'proxies.importTitle': 'Nhập danh sách proxy',
     'proxies.importHint': 'Mỗi dòng một proxy (tối đa 100): host:port, scheme://user:pass@host:port, socks5://[::1]:1080 hoặc host:port:user:pass. Ký tự đặc biệt trong tài khoản cần mã hoá phần trăm. Cả danh sách được kiểm tra trước khi lưu.',
@@ -176,6 +184,24 @@ I18N.add({
     'proxies.err.bad-name': 'Tên quá dài',
   },
 });
+
+/* One pasted proxy line -> saved library proxy (via /api/proxies/import, same formats as Import list).
+   Returns the proxy id; throws a translated message for a bad line. An exact duplicate already in the
+   library is reused when it can be matched by host and port. */
+async function proxyFromLine(line) {
+  const text = line.trim();
+  if (!text) throw new Error(t('proxies.err.bad-format'));
+  if (text.includes('\n')) throw new Error(t('proxies.err.bad-format'));
+  const r = await fetch('/api/proxies/import', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }) });
+  const j = await r.json().catch(() => ({}));
+  if (j.rejected && j.rejected.length) throw new Error(t('proxies.err.' + j.rejected[0].code));
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  if (j.created.length) return j.created[0].id;
+  const all = (await api('/api/proxies')).proxies;
+  const hit = all.filter(x => text.includes(x.host) && text.includes(':' + x.serverPort));
+  if (hit.length === 1) return hit[0].id;
+  throw new Error(t('proxies.newDuplicate'));
+}
 
 /* ctx = { load } — reload callback of the page that uses it. */
 function useProxies(ctx) {

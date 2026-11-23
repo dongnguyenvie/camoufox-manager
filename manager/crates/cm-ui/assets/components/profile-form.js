@@ -205,7 +205,7 @@ CM.components.CmProfileForm = {
   emits: ['close', 'saved'],
   setup(props, { emit }) {
     const { reactive, ref, computed, watch } = Vue;
-    const f = reactive({ name: '', notes: '', os: 'win', startUrl: '', screen: '', window: '', locale: '', timezone: '', webrtc: 'replace', fonts: '', humanize: false, blockLocal: true, canvas: 'stable', data: { passwords: true, history: true, cache: true, siteStorage: true }, prefs: [], bookmarks: [], proxyId: '' });
+    const f = reactive({ name: '', notes: '', os: 'win', startUrl: '', screen: '', window: '', locale: '', timezone: '', webrtc: 'replace', fonts: '', humanize: false, blockLocal: true, canvas: 'stable', data: { passwords: true, history: true, cache: true, siteStorage: true }, prefs: [], bookmarks: [], proxyId: '', proxyLine: '' });
     const view = ref(null);          // snapshot shown in the machine panel (replaced after a regenerate)
     const busy = ref(false), error = ref(''), osPrompt = ref(false);
     const regen = reactive({ open: false, os: 'win', busy: false });
@@ -214,7 +214,7 @@ CM.components.CmProfileForm = {
       view.value = p;
       const s = p.settings || {};
       Object.assign(f, {
-        name: p.name, notes: p.notes || '', os: p.os, proxyId: p.assigned ? String(p.assigned.id) : '', startUrl: s.startUrl || '', screen: s.screen || '', window: s.window || '',
+        name: p.name, notes: p.notes || '', os: p.os, proxyId: p.assigned ? String(p.assigned.id) : '', proxyLine: '', startUrl: s.startUrl || '', screen: s.screen || '', window: s.window || '',
         locale: s.locale || '', timezone: s.timezone || '', webrtc: s.webrtc || 'replace', fonts: (s.fonts || []).join('\n'),
         humanize: !!s.humanize, blockLocal: s.blockLocalNetwork !== false, canvas: s.canvas || 'stable',
         data: { passwords: true, history: true, cache: true, siteStorage: true, ...(s.data || {}) },
@@ -240,7 +240,7 @@ CM.components.CmProfileForm = {
     async function saveProxy() {
       const before = props.profile.assigned ? String(props.profile.assigned.id) : '';
       if (f.proxyId === before) return;
-      const proxyId = f.proxyId === '' ? null : Number(f.proxyId);
+      const proxyId = f.proxyId === 'new' ? await proxyFromLine(f.proxyLine) : f.proxyId === '' ? null : Number(f.proxyId);
       await api(`/api/profiles/${props.profile.id}/assign`, { method: 'POST', body: JSON.stringify({ proxyId }) });
       if (proxyId !== null) api(`/api/proxies/${proxyId}/check`, { method: 'POST' }).then(() => emit('saved')).catch(e => toast(t('proxies.failed', { msg: e.message }), true));
     }
@@ -371,7 +371,11 @@ CM.components.CmProfileForm = {
             <select class="input" v-model="f.proxyId" :disabled="running">
               <option value="">{{ t('proxies.none') }}</option>
               <option v-for="x in proxies" :key="x.id" :value="String(x.id)">#{{ x.id }} {{ x.name && x.name !== x.label ? x.name + ' · ' : '' }}{{ x.label }}{{ x.geo ? ' · ' + x.geo.countryCode : '' }}</option>
+              <option value="new">{{ t('proxies.newOption') }}</option>
             </select>
+          </cm-field>
+          <cm-field v-if="f.proxyId === 'new'" class="col-span-full" :label="t('proxies.newLine')" :hint="t('proxies.newLineHint')">
+            <input class="input mono" v-model="f.proxyLine" placeholder="1.2.3.4:8080:user:pass" autocomplete="off" spellcheck="false">
           </cm-field>
           <cm-field class="col-span-full" :label="t('profileform.webrtc')">
             <select class="input" v-model="f.webrtc"><option v-for="m in WEBRTC" :key="m" :value="m">{{ t('profileform.webrtc.' + m) }}</option></select>

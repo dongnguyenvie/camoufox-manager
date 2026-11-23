@@ -425,7 +425,7 @@ CM.pages.profiles = {
     }
     const reveal = p => api(`/api/profiles/${p.id}/reveal`, { method: 'POST' }).catch(err => toast(err.message, true));
 
-    const dlg = reactive({ open: false, name: '', os: 'win', proxyId: '', busy: false });
+    const dlg = reactive({ open: false, name: '', os: 'win', proxyId: '', proxyLine: '', busy: false });
     const del = reactive({ p: null, busy: false });
     // CM-3.1 trash: list + retention, dialog, confirm (kind 'one' with p, or 'all')
     const trash = reactive({ open: false, days: 7, items: [], busy: false, confirm: null });
@@ -462,16 +462,17 @@ CM.pages.profiles = {
     const cookies = reactive({ id: null }); // cookies dialog (components/cookies.js)
     const cookiesFor = computed(() => (cookies.id && o.value?.profiles.find(p => p.id === cookies.id)) || null);
     const nameInput = ref(null);
-    const openCreate = () => { dlg.open = true; dlg.name = ''; dlg.os = 'win'; dlg.proxyId = ''; nextTick(() => nameInput.value?.focus()); };
+    const openCreate = () => { dlg.open = true; dlg.name = ''; dlg.os = 'win'; dlg.proxyId = ''; dlg.proxyLine = ''; nextTick(() => nameInput.value?.focus()); };
     // `thenEdit`: open the full settings form (components/profile-form.js) on the new profile.
     async function create(thenEdit) {
       if (!dlg.name.trim() || dlg.busy) return;
       dlg.busy = true;
       let p = null;
       try {
+        // A new proxy is saved first, so a bad line stops before the profile is created.
+        const proxyId = dlg.proxyId === 'new' ? await proxyFromLine(dlg.proxyLine) : dlg.proxyId === '' ? null : Number(dlg.proxyId);
         p = await api('/api/profiles', { method: 'POST', body: JSON.stringify({ name: dlg.name.trim(), os: dlg.os }) });
-        if (dlg.proxyId !== '') {
-          const proxyId = Number(dlg.proxyId);
+        if (proxyId !== null) {
           await api(`/api/profiles/${p.id}/assign`, { method: 'POST', body: JSON.stringify({ proxyId }) });
           api(`/api/proxies/${proxyId}/check`, { method: 'POST' }).then(() => load()).catch(err => toast(t('proxies.failed', { msg: err.message }), true));
         }
@@ -668,13 +669,17 @@ CM.pages.profiles = {
           <select class="input" v-model="dlg.proxyId">
             <option value="">{{ noProxy() }}</option>
             <option v-for="x in proxies" :key="x.id" :value="String(x.id)">#{{ x.id }} {{ x.label }}{{ x.geo ? ' · ' + x.geo.countryCode : '' }}</option>
+            <option value="new">{{ t('proxies.newOption') }}</option>
           </select>
+        </cm-field>
+        <cm-field v-if="dlg.proxyId === 'new'" :label="t('proxies.newLine')" :hint="t('proxies.newLineHint')">
+          <input class="input mono" v-model="dlg.proxyLine" placeholder="1.2.3.4:8080:user:pass" autocomplete="off" spellcheck="false">
         </cm-field>
       </form>
       <template #footer>
         <button type="button" class="btn" :disabled="dlg.busy" @click="dlg.open = false">{{ t('common.cancel') }}</button>
-        <button type="button" class="btn" :disabled="dlg.busy || !dlg.name.trim()" @click="create(true)">{{ t('profiles.createEdit') }}</button>
-        <button type="submit" form="create-profile" class="btn btn-start" :disabled="dlg.busy || !dlg.name.trim()">
+        <button type="button" class="btn" :disabled="dlg.busy || !dlg.name.trim() || (dlg.proxyId === 'new' && !dlg.proxyLine.trim())" @click="create(true)">{{ t('profiles.createEdit') }}</button>
+        <button type="submit" form="create-profile" class="btn btn-start" :disabled="dlg.busy || !dlg.name.trim() || (dlg.proxyId === 'new' && !dlg.proxyLine.trim())">
           <template v-if="dlg.busy"><span class="spin"></span> {{ t('profiles.creating') }}</template><template v-else>{{ t('common.create') }}</template>
         </button>
       </template>
